@@ -28,6 +28,13 @@ AUTOSTART_PROCESSES(&oven_proc);
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	LOG_INFO("input_callback\n");
+	//LORENZO
+	if(linkaddr_cmp(dest, &linkaddr_null)){
+		//BROADCAST MSG received
+		LOG_INFO("Broadcast received\n");
+		basestation = *src;
+	}
+	//FINE LORENZO
 	LOG_INFO("Received BROADCAST msg \"%d\" \n" , *(uint8_t *)data);
 	basestation = *src;
 	nullnet_len = strlen("oven")+1;
@@ -115,4 +122,5 @@ PROCESS_THREAD(oven_proc, ev, data){
 
 	PROCESS_END();
 }
+
 

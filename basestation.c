@@ -22,6 +22,9 @@ static int uni_period = 0;
 */
 
 static linkaddr_t oven_addr;
+static linkaddr_t window_addr;
+bool oven_sync = false;
+bool window_sync = false;
 
 PROCESS(basestation_proc, "basestation");
 
@@ -29,7 +32,13 @@ AUTOSTART_PROCESSES(&basestation_proc);
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
-	char received_data[strlen((char *)data) + 1];
+	uint8_t op = *(uint8_t *)data;
+	char * content = ((char*)data)+1;
+	char received_data[strlen((char *)content) + 1];
+	LOG_INFO("op is %d and content is \"%s\"\n",(int)op,content);
+	return;
+
+
 	if(len == strlen((char *)data) + 1) {
 		memcpy(& received_data, data, strlen((char *)data) + 1);
 		if(strcmp(received_data, "oven")==0){
@@ -39,9 +48,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			LOG_INFO_LLADDR(src);
 			LOG_INFO_("\n");
 		}
-		else if(strcmp(received_data, "windown")==0){
+		else if(strcmp(received_data, "window")==0){
 			LOG_INFO("strcmp\n");
-			oven_addr = *src;
+			window_addr = *src;
 			LOG_INFO("Windown address : ");
 			LOG_INFO_LLADDR(src);
 			LOG_INFO_("\n");

@@ -26,6 +26,32 @@ PROCESS(oven_proc, "oven_proc");
 
 AUTOSTART_PROCESSES(&oven_proc);
 
+void node_sync(){
+	/*
+	LOG_INFO("Received BROADCAST msg \"%d\" \n" , *(uint8_t *)data);
+	nullnet_len = strlen("oven")+1;
+	char ack[strlen("oven")+1];
+	memcpy(ack,"oven",nullnet_len);
+	LOG_INFO("Write ACK \"%s\" \b",ack);
+	nullnet_buf = (uint8_t *)ack;
+	NETSTACK_NETWORK.output(&basestation);
+	*/
+
+	uint8_t op = 23;
+	char * content = "messaggio forno";
+	char msg[strlen(content)+2];
+	msg[0] = (char)op;
+	nullnet_len = strlen(content)+2;
+
+	memcpy(&msg[1],content,nullnet_len-1);
+	nullnet_buf = (uint8_t *)msg;
+	NETSTACK_NETWORK.output(&basestation);
+
+	//char received_data[strlen((char *)content) + 1];
+	//LOG_INFO("op is %d and content is \"%s\"\n",(int)op,content);
+	return;
+}
+
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	LOG_INFO("input_callback\n");
 	//LORENZO
@@ -33,18 +59,10 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		//BROADCAST MSG received
 		LOG_INFO("Broadcast received\n");
 		basestation = *src;
+		node_sync();
 	}
-	//FINE LORENZO
-	LOG_INFO("Received BROADCAST msg \"%d\" \n" , *(uint8_t *)data);
-	basestation = *src;
-	nullnet_len = strlen("oven")+1;
-	char ack[strlen("oven")+1];
-	memcpy(ack,"oven",nullnet_len);
-	LOG_INFO("SCRIVO ACK \"%s\" \b",ack);
-	//sprintf(ack,"oven");
-	//uint8_t *ack = *(uint8_t *)DISCOVER_RESP;
-	nullnet_buf = (uint8_t *)ack;
-	NETSTACK_NETWORK.output(&basestation);
+
+	
 
 
 	/*char received_data[strlen((char*)data)+1];

@@ -60,24 +60,60 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 	}
 }
 
+void handleOperationOK(const linkaddr_t* src){
+	if(linkaddr_cmp(src,&oven_addr)){
+		ovenBusy = false;
+	}
+
+	if(linkaddr_cmp(src,&window_addr)){
+		windowBusy = false;
+	}
+
+	LOG_INFO("Operazione andata a buon fine \n");
+	return;
+}
+
+void handleOperationError(const linkaddr_t* src){
+	if(linkaddr_cmp(src,&oven_addr)){
+		ovenBusy = false;
+	}
+
+	if(linkaddr_cmp(src,&window_addr)){
+		windowBusy = false;
+	}
+
+	LOG_INFO("Operazione non andata a buon fine\n");
+
+	return;
+}
+
+char* getMsg(const void *data, uint16_t len){
+	if(len != strlen((char *)data) + 1){
+		LOG_INFO("errore lunghezza messaggio ricevuto \n");
+	}	
+	char* content = ((char*)data)+1;
+	return content;
+}
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	uint8_t op = *(uint8_t *)data;
-	char* content = ((char*)data)+1;
-	char received_data[strlen((char *)content) + 1];
-	if(len == strlen((char *)data) + 1) 
-		memcpy(&received_data, content, strlen((char *)content) + 1);
+	//char content[strlen((char *)data)];
 
-	else{
-	
-		LOG_INFO("errore lunghezza messaggio ricevuto \n");
-		return;	
-	}
+	//	memcpy(&received_data, content, strlen((char *)content) + 1);
 
 	switch(op){
 
 		case DISCOVER_RESP:
-			synchNode(received_data,src);
+			//memcpy(content,getMsg(data,len),strlen((char *)data));
+			synchNode(getMsg(data,len),src);
+			break;
+
+		case OPERATION_OK:
+			handleOperationOK(src);
+			break;
+
+		case OPERATION_ERROR:
+			handleOperationError(src);
 			break;
 
 		default:

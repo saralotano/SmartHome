@@ -2,3 +2,5 @@
 #define DISCOVER_RESP 1
 #define NUMBER_NODES 2
 #define START_OVEN 3
+#define OPERATION_OK 4
+#define OPERATION_ERROR 5

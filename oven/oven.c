@@ -36,6 +36,27 @@ void node_sync(){
 	return;
 }
 
+void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
+
+	//char * content = "oven";
+	uint8_t size;
+	if(content == NULL)
+		size = 0;
+	else
+		size = strlen(content) + 1; 
+	char msg[size + 1];
+	msg[0] = (char)op;
+	nullnet_len = size + 1;
+
+	if(size != 0)
+		memcpy(&msg[1],content,nullnet_len-1);
+
+	nullnet_buf = (uint8_t *)msg;
+	NETSTACK_NETWORK.output(dest);
+
+	return;
+}
+
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	LOG_INFO("input_callback\n");
 	//LORENZO
@@ -58,32 +79,38 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		char* ptr = strtok(content,delim);
 		int oven_degree, oven_time;
 		oven_degree = atoi(ptr);
+		bool error = false;
+		
 		if(oven_degree < 50 || oven_degree > 250){
 			LOG_INFO("temperatura non corretta \n");
-			return;
+			error = true;
 		}
 
 		ptr = strtok(NULL,delim);
 		if(ptr == NULL){
 			LOG_INFO("formato errato \n");
-			return;
+			error = true;
 		}
 
 		oven_time = atoi(ptr);
 		if(oven_time <= 0 || oven_time > 300){
 			LOG_INFO("tempo di cottura non corretto\n");
-			return;
+			error = true;
 		}
 
 		ptr = strtok(NULL,delim);
 		if(ptr != NULL){
 			LOG_INFO("formato errato \n");
-			return;
+			error = true;
 		}
 
+		if(error){
+			sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
+			return;
+		}
 		LOG_INFO("oven_degree: %d\n",oven_degree);
 		LOG_INFO("oven_time: %d\n",oven_time);
-
+		sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	}
 
 }

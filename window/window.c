@@ -22,23 +22,23 @@ static int uni_period = 0;*/
 linkaddr_t basestation;
 
 
-PROCESS(oven_proc, "oven_proc");
+PROCESS(window_proc, "window_proc");
 
-AUTOSTART_PROCESSES(&oven_proc);
+AUTOSTART_PROCESSES(&window_proc);
 
 void node_sync(){
 	/*
 	LOG_INFO("Received BROADCAST msg \"%d\" \n" , *(uint8_t *)data);
-	nullnet_len = strlen("oven")+1;
-	char ack[strlen("oven")+1];
-	memcpy(ack,"oven",nullnet_len);
+	nullnet_len = strlen("window")+1;
+	char ack[strlen("window")+1];
+	memcpy(ack,"window",nullnet_len);
 	LOG_INFO("Write ACK \"%s\" \b",ack);
 	nullnet_buf = (uint8_t *)ack;
 	NETSTACK_NETWORK.output(&basestation);
 	*/
 
 	uint8_t op = DISCOVER_RESP;
-	char * content = "oven";
+	char * content = "window";
 	char msg[strlen(content)+2];
 	msg[0] = (char)op;
 	nullnet_len = strlen(content)+2;
@@ -92,7 +92,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	//}
 }
 
-PROCESS_THREAD(oven_proc, ev, data){
+PROCESS_THREAD(window_proc, ev, data){
 	/*static struct etimer periodic_timer;
 	static struct etimer broadcast_periodic_timer;
 	static uint8_t * uni_msg;*/

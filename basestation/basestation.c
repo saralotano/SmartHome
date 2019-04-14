@@ -20,7 +20,6 @@ static linkaddr_t dest_addr = {{ 0x0000, 0x0012, 0x004b, 0x0000, 0x000f, 0x0082,
 static int bro_period = 0;
 static int uni_period = 0;
 */
-
 static linkaddr_t oven_addr;
 static linkaddr_t window_addr;
 bool oven_sync = false;
@@ -113,7 +112,6 @@ PROCESS_THREAD(basestation_proc, ev, data){
 		LOG_INFO("Sending BROADCAST \"%d\" " , (int) bro_msg);
 		//LOG_INFO_LLADDR(&dest_addr);
 		LOG_INFO_("\n");
-
 	PROCESS_END();
 }
 

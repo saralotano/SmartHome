@@ -4,3 +4,4 @@
 #define START_OVEN 3
 #define OPERATION_OK 4
 #define OPERATION_ERROR 5
+#define OVEN_NOT_BUSY 6

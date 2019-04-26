@@ -20,6 +20,7 @@ static int current_temp = 0;
 static int oven_degree = 0;
 static int oven_time = 0;
 
+
 //serve a simulare la fase di riscaldamento del forno
 //aggiunge alla tempratura del sensore un valore random di massimo 50 gradi
 static void get_current_temp(void){

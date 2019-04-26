@@ -87,6 +87,19 @@ void handleOperationError(const linkaddr_t* src){
 	return;
 }
 
+/*
+void handleOven(const linkaddr_t* src){
+	LOG_INFO("dentro handleOven\n");
+
+	if(linkaddr_cmp(src,&oven_addr)){	//ERRORE non entra in questo if
+		printf("Il forno è pronto per esere utilizzato\n");
+	}
+
+	return;
+}
+*/
+
+
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
 		LOG_INFO("errore lunghezza messaggio ricevuto \n");
@@ -97,6 +110,7 @@ char* getMsg(const void *data, uint16_t len){
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	uint8_t op = *(uint8_t *)data;
+	LOG_INFO("opcode ricevuto %d\n", (int) op);
 	//char content[strlen((char *)data)];
 
 	//	memcpy(&received_data, content, strlen((char *)content) + 1);
@@ -114,6 +128,11 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 		case OPERATION_ERROR:
 			handleOperationError(src);
+			break;
+
+		case OVEN_NOT_BUSY:
+			LOG_INFO("dentro il case oven not busy\n");
+			//handleOven(src);	//volevo chiamare questa funzione ma non funziona
 			break;
 
 		default:

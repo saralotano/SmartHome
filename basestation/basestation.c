@@ -11,17 +11,8 @@
 //#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
-//#define SEND_INTERVAL (8 * CLOCK_SECOND)
-//#define SEND_INTERVAL_BRO (13 * CLOCK_SECOND)
 
 
-
-
-/*
-static linkaddr_t dest_addr = {{ 0x0000, 0x0012, 0x004b, 0x0000, 0x000f, 0x0082, 0x0000, 0x0002 }};
-static int bro_period = 0;
-static int uni_period = 0;
-*/
 static linkaddr_t oven_addr;
 static linkaddr_t window_addr;
 static struct ctimer broad_timer;
@@ -36,7 +27,7 @@ AUTOSTART_PROCESSES(&basestation_proc);
 
 static void synchNode(char* received_data,const linkaddr_t *src){
 
-		if(strcmp(received_data, "oven")== 0 && !oven_sync){
+		if(strcmp(received_data, "oven") == 0 && !oven_sync){
 			oven_addr = *src;
 			LOG_INFO("Oven address : ");
 			LOG_INFO_LLADDR(src);
@@ -44,7 +35,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 			oven_sync = true;
 			num_sync_nodes++;
 		}
-		else if(strcmp(received_data, "window")==0 && !window_sync){
+		else if(strcmp(received_data, "window") == 0 && !window_sync){
 			window_addr = *src;
 			LOG_INFO("Window address : ");
 			LOG_INFO_LLADDR(src);
@@ -62,12 +53,10 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
-		//ovenBusy = false;	//non va messo a false perchè il forno sta cucinando qualcosa
 		LOG_INFO("parametri ricevuti correttamente dal forno\n");
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
-		//windowBusy = false;
 		LOG_INFO("parametri ricevuti correttamente dalla finestra\n");
 	}
 
@@ -93,17 +82,22 @@ void handleOperationError(const linkaddr_t* src){
 }
 
 
-/*
-void handleOven(const linkaddr_t* src){
-	LOG_INFO("dentro handleOven\n");
 
-	if(linkaddr_cmp(src,&oven_addr)){	//ERRORE non entra in questo if
+void handleOperationCompleted(const linkaddr_t* src){
+
+	if(linkaddr_cmp(src,&oven_addr)){	
+		ovenBusy = false;
 		printf("Il forno è pronto per esere utilizzato\n");
 	}
+	if(linkaddr_cmp(src,&window_addr)){	
+		windowBusy = false;
+		printf("La finestra è pronta per esere utilizzata\n");
+	}
+
 
 	return;
 }
-*/
+
 
 
 char* getMsg(const void *data, uint16_t len){
@@ -116,7 +110,7 @@ char* getMsg(const void *data, uint16_t len){
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	uint8_t op = *(uint8_t *)data;
-	LOG_INFO("opcode ricevuto %d\n", (int) op);
+	//LOG_INFO("opcode ricevuto %d\n", (int) op);
 	//char content[strlen((char *)data)];
 
 	//	memcpy(&received_data, content, strlen((char *)content) + 1);
@@ -136,10 +130,8 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			handleOperationError(src);
 			break;
 
-		case OVEN_NOT_BUSY:
-			ovenBusy = false;
-			LOG_INFO("dentro il case oven not busy\n");
-			//handleOven(src);	//volevo chiamare questa funzione ma non funziona
+		case OPERATION_COMPLETED:
+			handleOperationCompleted(src);	
 			break;
 
 		default:

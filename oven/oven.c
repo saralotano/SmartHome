@@ -17,8 +17,6 @@
 
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
-//#define SEND_INTERVAL (8 * CLOCK_SECOND)	
-//#define SEND_INTERVAL_BRO (13 * CLOCK_SECOND)	
 
 
 static linkaddr_t basestation_addr;
@@ -76,8 +74,8 @@ void blinkRedLedCallback(){
 		leds_off(LEDS_RED);
 		printf("Preparation ended \n");
 		counter = 0;
-		sendMsg(OVEN_NOT_BUSY,&basestation_addr,NULL);
-		//LOG_INFO("send message to base station: %d \n", OVEN_NOT_BUSY);
+		sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
+		//LOG_INFO("send message to base station: %d \n", OPERATION_COMPLETED);
 	}
 
 	return;
@@ -163,7 +161,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		return;
 	}
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
-		LOG_INFO("basestation mi ha inviato un msg \n");
+		//LOG_INFO("basestation mi ha inviato un msg \n");
 		uint8_t op = *(uint8_t *)data;
 		char* content = ((char*)data)+1;
 		char received_data[strlen((char *)content) + 1];
@@ -219,7 +217,7 @@ PROCESS_THREAD(oven_proc, ev, data){
 	PROCESS_BEGIN();
 	nullnet_set_input_callback(input_callback);
 
-	/* questa parte si occupa della gestione degli eventi legati ai buttons
+	/* //questa parte si occupa della gestione degli eventi legati ai buttons
 
 	while(1){
 		PROCESS_YIELD();
@@ -233,7 +231,7 @@ PROCESS_THREAD(oven_proc, ev, data){
 				ctimer_stop(&b_leds);
 				leds_off(LEDS_RED);
 				printf("Preparation ended \n");
-				sendMsg(OVEN_NOT_BUSY,&basestation_addr,NULL);
+				sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
 			}
 		}
 	}

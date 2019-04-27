@@ -27,7 +27,7 @@ static linkaddr_t window_addr;
 static struct ctimer broad_timer;
 bool oven_sync = false;
 bool window_sync = false;
-bool ovenBusy = false, windowBusy = false;
+bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 int num_sync_nodes = 0;				//
 PROCESS(basestation_proc, "basestation");
 
@@ -62,30 +62,36 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
-		ovenBusy = false;
+		//ovenBusy = false;	//non va messo a false perchè il forno sta cucinando qualcosa
+		LOG_INFO("parametri ricevuti correttamente dal forno\n");
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
-		windowBusy = false;
+		//windowBusy = false;
+		LOG_INFO("parametri ricevuti correttamente dalla finestra\n");
 	}
 
 	LOG_INFO("Operazione andata a buon fine \n");
+	basestationBusy = false;
 	return;
 }
 
 void handleOperationError(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
 		ovenBusy = false;
+		LOG_INFO("parametri non ricevuti correttamente dal forno\n");
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
 		windowBusy = false;
+		LOG_INFO("parametri non ricevuti correttamente dalla finestra\n");
 	}
 
 	LOG_INFO("Operazione non andata a buon fine\n");
-
+	basestationBusy = false;
 	return;
 }
+
 
 /*
 void handleOven(const linkaddr_t* src){
@@ -131,6 +137,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 
 		case OVEN_NOT_BUSY:
+			ovenBusy = false;
 			LOG_INFO("dentro il case oven not busy\n");
 			//handleOven(src);	//volevo chiamare questa funzione ma non funziona
 			break;
@@ -167,16 +174,19 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 
 
 void handle_serial_line(char* data){
-	if(!ovenBusy && !windowBusy){
+
+	if(!basestationBusy){
 		LOG_INFO("nessuna delle due occupata \n");
 		if(!strcmp(data,"oven") && oven_sync){
 			printf("Inserire temperatura espressa in gradi centigradi e durata della cottura espressa in minuti separati da una virgola, come segue: 180,25\n");			
 			ovenBusy = true;
+			basestationBusy = true;
 			return;
 		}
 		if(!strcmp(data,"window") && window_sync){
 			LOG_INFO("riconosco window\n");
 			windowBusy = true;
+			basestationBusy = true;
 			return;
 		}
 
@@ -184,7 +194,7 @@ void handle_serial_line(char* data){
 		return;
 	}
 
-	if(ovenBusy){
+	if(ovenBusy){							//sto ricevendo comandi per il forno
 		LOG_INFO("dentro ovenBusy \n");
 		sendMsg(START_OVEN,&oven_addr,data);
 	}

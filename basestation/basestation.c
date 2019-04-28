@@ -52,12 +52,11 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 			num_sync_nodes++;
 		}
 
-	LOG_INFO("numero di nodi sincronizzati %d \n", num_sync_nodes);
+	LOG_INFO("Number of synchronized nodes: %d \n", num_sync_nodes);
 
 	if(num_sync_nodes == NUMBER_NODES){
-		LOG_INFO("numero di nodi sincronizzati raggiunto \n");
+		LOG_INFO("All the nodes are correctly synchronized \n");
 		ctimer_stop(&broad_timer);
-
 		leds_on(LEDS_GREEN);
 
 		if(!firstTime){
@@ -69,14 +68,14 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
-		LOG_INFO("parametri ricevuti correttamente dal forno\n");
+		LOG_INFO("The oven has correctly received all the parameters. \n");
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
-		LOG_INFO("parametri ricevuti correttamente dalla finestra\n");
+		LOG_INFO("The window has correctly received all the parameters. \n");
 	}
 
-	LOG_INFO("Operazione andata a buon fine \n");
+	//LOG_INFO("Operazione andata a buon fine \n");
 	basestationBusy = false;
 	return;
 }
@@ -84,15 +83,15 @@ void handleOperationOK(const linkaddr_t* src){
 void handleOperationError(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
 		ovenBusy = false;
-		LOG_INFO("parametri non ricevuti correttamente dal forno\n");
+		LOG_INFO("The oven did not correctly received all the parameters. \n");
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
 		windowBusy = false;
-		LOG_INFO("parametri non ricevuti correttamente dalla finestra\n");
+		LOG_INFO("The window did not correctly received all the parameters. \n");
 	}
 
-	LOG_INFO("Operazione non andata a buon fine\n");
+	//LOG_INFO("Operazione non andata a buon fine\n");
 	basestationBusy = false;
 	return;
 }
@@ -103,13 +102,12 @@ void handleOperationCompleted(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
 		ovenBusy = false;
-		printf("Il forno è pronto per esere utilizzato\n");
+		printf("The oven is ready to be used\n");
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowBusy = false;
-		printf("La finestra è pronta per esere utilizzata\n");
+		printf("The window is ready to be used\n");
 	}
-
 
 	return;
 }
@@ -118,7 +116,7 @@ void handleOperationCompleted(const linkaddr_t* src){
 
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
-		LOG_INFO("errore lunghezza messaggio ricevuto \n");
+		LOG_INFO("Message lenght error \n");
 	}	
 	char* content = ((char*)data)+1;
 	return content;
@@ -126,15 +124,10 @@ char* getMsg(const void *data, uint16_t len){
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	uint8_t op = *(uint8_t *)data;
-	//LOG_INFO("opcode ricevuto %d\n", (int) op);
-	//char content[strlen((char *)data)];
-
-	//	memcpy(&received_data, content, strlen((char *)content) + 1);
 
 	switch(op){
 
 		case DISCOVER_RESP:
-			//memcpy(content,getMsg(data,len),strlen((char *)data));
 			synchNode(getMsg(data,len),src);
 			break;
 
@@ -151,7 +144,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 
 		default:
-			LOG_INFO("op non riconosciuto \n");
+			LOG_INFO("Error: Code not found \n");
 			return;
 	}
 	
@@ -160,7 +153,6 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 
-	//char * content = "oven";
 	uint8_t size;
 	if(content == NULL)
 		size = 0;
@@ -184,33 +176,35 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 void handle_serial_line(char* data){
 
 	if(!basestationBusy){
-		LOG_INFO("nessuna delle due occupata \n");
+		//LOG_INFO("Basestation available \n");
 		if(!strcmp(data,"oven") && oven_sync){
-			printf("Inserire temperatura espressa in gradi centigradi e durata della cottura espressa in minuti separati da una virgola, come segue: 180,25\n");			
+			LOG_INFO("Selected device: OVEN\n");
+			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separate by a comma\n");
+			printf("Example: 180,30\n");			
 			ovenBusy = true;
 			basestationBusy = true;
 			return;
 		}
 		if(!strcmp(data,"window") && window_sync){
-			LOG_INFO("riconosco window\n");
+			LOG_INFO("Selected device: WINDOW\n");
 			windowBusy = true;
 			basestationBusy = true;
 			return;
 		}
 
-		LOG_INFO("dispositivo sconosciuto \n");
+		LOG_INFO("Error: Device not found \n");
 		return;
 	}
 
-	if(ovenBusy){							//sto ricevendo comandi per il forno
-		LOG_INFO("dentro ovenBusy \n");
+	if(ovenBusy){	//receiving commands for the oven
+		//LOG_INFO("dentro ovenBusy \n");
 		sendMsg(START_OVEN,&oven_addr,data);
 	}
 
 }
 
 void blinkGreenLedCallback(){
-	LOG_INFO("dentro blinkGreenLedCallback \n");
+	//LOG_INFO("dentro blinkGreenLedCallback \n");
 	leds_toggle(LEDS_GREEN);
 	ctimer_restart(&green_led);
 }
@@ -219,13 +213,12 @@ void blinkGreenLedCallback(){
 void discoverNodes(){
 	sendMsg(DISCOVER_REQ,NULL,NULL);
 	num_sync_attempts++;
-	LOG_INFO("numero tentativi discoverNodes: %d\n", num_sync_attempts);
-
+	LOG_INFO("Number of discoverNode's attempts: %d\n", num_sync_attempts);
 	leds_toggle(LEDS_RED);
 
 	if(num_sync_attempts == MAX_NUM_ATTEMPTS){
 		num_sync_attempts = 0;
-		LOG_INFO("fine tentativi di broadcast MAX_NUM_ATTEMPTS\n");
+		LOG_INFO("Reached MAX_NUM_ATTEMPTS\n");
 		ctimer_stop(&broad_timer);
 		leds_off(LEDS_RED);
 
@@ -236,7 +229,8 @@ void discoverNodes(){
 		}
 
 		if(firstTime){
-			ctimer_set(&reactive_broad_timer, 5*CLOCK_SECOND, broadtimeCallback, NULL);	//cambiare in minuti
+			ctimer_set(&reactive_broad_timer, 5 * CLOCK_SECOND, broadtimeCallback, NULL);
+			//the wait is simulated in seconds and not in minutes
 			firstTime = false;
 		}		
 		else
@@ -250,15 +244,14 @@ void broadtimeCallback(){
 	ctimer_restart(&broad_timer);
 }
 
+
 PROCESS_THREAD(basestation_proc, ev, data){
 
 	PROCESS_BEGIN();
 
-	leds_on(LEDS_RED);
-
 	//cc26xx_uart_set_input(serial_line_input_byte);
 	//serial_line_init();
-
+	leds_on(LEDS_RED);
 	nullnet_set_input_callback(input_callback);
 	ctimer_set(&broad_timer,CLOCK_SECOND,discoverNodes,NULL);
 
@@ -267,7 +260,6 @@ PROCESS_THREAD(basestation_proc, ev, data){
 		printf("received: %s\n",(char*)data);
 		handle_serial_line((char*)data);
 	}
-
 
 	PROCESS_END();
 }

@@ -112,6 +112,20 @@ void handleOperationCompleted(const linkaddr_t* src){
 	return;
 }
 
+void handleCancelOK(const linkaddr_t* src){
+
+	if(linkaddr_cmp(src,&oven_addr)){	
+		ovenBusy = false;
+		printf("The oven is no longer used\n");
+	}
+	if(linkaddr_cmp(src,&window_addr)){	
+		windowBusy = false;
+		printf("The window is no longer used\n");
+	}
+
+	return;
+}
+
 
 
 char* getMsg(const void *data, uint16_t len){
@@ -142,7 +156,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		case OPERATION_COMPLETED:
 			handleOperationCompleted(src);	
 			break;
-
+		case CANCEL_OK:
+			handleCancelOK(src);
+			break;
 		default:
 			LOG_INFO("Error: Code not found \n");
 			return;
@@ -179,7 +195,7 @@ void handle_serial_line(char* data){
 		//LOG_INFO("Basestation available \n");
 		if(!strcmp(data,"oven") && oven_sync){
 			LOG_INFO("Selected device: OVEN\n");
-			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separate by a comma\n");
+			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
 			printf("Example: 180,30\n");			
 			ovenBusy = true;
 			basestationBusy = true;
@@ -191,15 +207,42 @@ void handle_serial_line(char* data){
 			basestationBusy = true;
 			return;
 		}
+		if(!strcmp(data,"cancel") && (oven_sync || window_sync)){
+			LOG_INFO("Cancel of last operation \n");
+			if(ovenBusy)
+				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
+			else //windowBusy
+				sendMsg(CANCEL_OPERATION,&window_addr,NULL);
+		}
 
-		LOG_INFO("Error: Device not found \n");
-		return;
+		printf("Error: Command not found \n");
+
+	}else{
+
+		if(ovenBusy){	//receiving commands for the oven
+			//LOG_INFO("dentro ovenBusy \n");
+			if(!strcmp(data,"cancel")){
+				LOG_INFO("Cancel of communication \n");
+				ovenBusy = false;
+				basestationBusy = false;
+			}else{
+				sendMsg(START_OPERATION,&oven_addr,data);
+			}
+
+		}else{//receiving command for the window
+
+			if(!strcmp(data,"cancel")){
+				LOG_INFO("Cancel of last operation \n");
+				windowBusy = false;
+				basestationBusy = false;
+			}else{
+				sendMsg(START_OPERATION,&window_addr,data);
+			}
+		}
+
 	}
 
-	if(ovenBusy){	//receiving commands for the oven
-		//LOG_INFO("dentro ovenBusy \n");
-		sendMsg(START_OVEN,&oven_addr,data);
-	}
+	
 
 }
 

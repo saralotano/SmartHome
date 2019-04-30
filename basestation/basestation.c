@@ -3,6 +3,7 @@
 #include "net/nullnet/nullnet.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "sys/log.h"
 #include "sys/clock.h"
 #include "parameters.h"
@@ -169,7 +170,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 
-	uint8_t size;
+	int size;
 	if(content == NULL)
 		size = 0;
 	else
@@ -179,13 +180,14 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	nullnet_len = size + 1;
 
 	if(size != 0)
-		memcpy(&msg[1],content,nullnet_len-1);
+		memcpy(&msg[1],content,size);
 
 	nullnet_buf = (uint8_t *)msg;
 	NETSTACK_NETWORK.output(dest);
 
 	return;
 }
+
 
 
 
@@ -209,10 +211,15 @@ void handle_serial_line(char* data){
 		}
 		if(!strcmp(data,"cancel") && (oven_sync || window_sync)){
 			LOG_INFO("Cancel of last operation \n");
-			if(ovenBusy)
+			if(ovenBusy){
 				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
-			else //windowBusy
+				return;
+			}
+			if(windowBusy){
 				sendMsg(CANCEL_OPERATION,&window_addr,NULL);
+				return;
+			}
+			return;
 		}
 
 		printf("Error: Command not found \n");
@@ -226,17 +233,26 @@ void handle_serial_line(char* data){
 				ovenBusy = false;
 				basestationBusy = false;
 			}else{
-				sendMsg(START_OPERATION,&oven_addr,data);
+				LOG_INFO("sono nell'else!\n");
+				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+					sendMsg(START_OPERATION,&oven_addr,data);
+				}else{
+					printf("Check the format of inserted data\n");
+				}
 			}
 
 		}else{//receiving command for the window
 
 			if(!strcmp(data,"cancel")){
-				LOG_INFO("Cancel of last operation \n");
+				LOG_INFO("Cancel of communication \n");
 				windowBusy = false;
 				basestationBusy = false;
 			}else{
-				sendMsg(START_OPERATION,&window_addr,data);
+				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+					sendMsg(START_OPERATION,&window_addr,data);
+				}else{
+					printf("Check the format of inserted data\n");
+				}
 			}
 		}
 

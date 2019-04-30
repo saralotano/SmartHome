@@ -8,3 +8,4 @@
 #define MAX_NUM_ATTEMPTS 5
 #define CANCEL_OPERATION 7
 #define CANCEL_OK 8
+#define CANCEL_ERR 9

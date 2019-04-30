@@ -127,6 +127,11 @@ void handleCancelOK(const linkaddr_t* src){
 	return;
 }
 
+void handleCancelErr(){
+	printf("The preparation is already finished, cannot cancel the operation\n");
+	return;
+}
+
 
 
 char* getMsg(const void *data, uint16_t len){
@@ -136,6 +141,8 @@ char* getMsg(const void *data, uint16_t len){
 	char* content = ((char*)data)+1;
 	return content;
 }
+
+
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	uint8_t op = *(uint8_t *)data;
@@ -159,6 +166,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 		case CANCEL_OK:
 			handleCancelOK(src);
+			break;
+		case CANCEL_ERR:
+			handleCancelErr();
 			break;
 		default:
 			LOG_INFO("Error: Code not found \n");
@@ -233,7 +243,6 @@ void handle_serial_line(char* data){
 				ovenBusy = false;
 				basestationBusy = false;
 			}else{
-				LOG_INFO("sono nell'else!\n");
 				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 					sendMsg(START_OPERATION,&oven_addr,data);
 				}else{

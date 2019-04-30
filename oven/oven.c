@@ -29,6 +29,7 @@ static bool buttonAvailable = false;
 static int current_temp = 0;
 static int oven_degree = 0;
 static int oven_time = 0;
+static int phase = INITIAL_PHASE;
 int counter = 0; // andrà tolto quando non simuleremo più su cooja
 
 
@@ -79,6 +80,7 @@ void blinkRedLedCallback(){
 
 	if(counter == 2){	//tutto questo if sostituisce l'utilizzo del bottone, dopo andrà tolto
 		ctimer_stop(&red_led);
+		phase = INITIAL_PHASE;
 		firstTimeBlinkRed = true;
 		leds_off(LEDS_RED);
 		printf("Preparation ended \n");
@@ -92,10 +94,11 @@ void blinkRedLedCallback(){
 //this callback function is called when the cooking time expires
 void endPreparationCallback(){
 	printf("Cooking ended, remove the preparation and push the right botton\n");
+	phase = PREPARATION_COMPLETED;
 	buttonAvailable = true;
 	leds_off(LEDS_GREEN);
 	leds_on(LEDS_RED);
-	ctimer_stop(&cooking_timer);
+	ctimer_stop(&cooking_timer); //Non necessario, perchè non viene fatta la restart su questo timer e si stoppa in automatico
 	ctimer_set(&red_led, 3*CLOCK_SECOND, blinkRedLedCallback, NULL);
 	return;
 }
@@ -110,6 +113,7 @@ void heatingPhase(){
 		leds_on(LEDS_GREEN);
 		printf("Insert the preparation and push the left button \n");
 		buttonAvailable = true;
+		phase = COOKING_PHASE;
 		printf("Cooking for %d minutes . . . \n", oven_time);	//andrà tolta quando non useremo più cooja
 		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//andrà tolta quando non useremo più cooja
 		//cooking time is simulated in seconds and not in minutes
@@ -132,7 +136,7 @@ void start_preparation (){
 	*/
 	current_temp = 30; // va modificato e preso dal sensore
 	LOG_INFO("Current sensor temperature : %d degrees\n", current_temp);
-
+	phase = PREHEATING_PHASE;
 	ctimer_set(&green_led, CLOCK_SECOND, heatingPhase, NULL);
 	return;
 }
@@ -154,6 +158,70 @@ void node_sync(){
 	return;
 }
 
+void handleStartOperation(char* content){
+	char delim[] = ",";
+	char* ptr = strtok(content,delim);
+	oven_degree = atoi(ptr);
+	bool error = false;
+		
+	if(oven_degree < 50 || oven_degree > 250){
+		LOG_INFO("Temperature not correct \n");
+		error = true;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr == NULL){
+		LOG_INFO("Format error: not enough parameters \n");
+		error = true;
+	}
+
+	oven_time = atoi(ptr);
+	
+	if(oven_time <= 0 || oven_time > 300){
+		LOG_INFO("Cooking time not correct\n");
+		error = true;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr != NULL){
+		LOG_INFO("Format error: too many parameters \n");
+		error = true;
+	}
+
+	if(error){
+		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
+		return;
+	}
+	LOG_INFO("oven_degree: %d\n",oven_degree);
+	LOG_INFO("oven_time: %d\n",oven_time);
+	sendMsg(OPERATION_OK,&basestation_addr,NULL);	
+	start_preparation();
+}
+
+void handleCancelOperation(){
+	switch(phase){
+		case PREHEATING_PHASE:
+			LOG_INFO("Preheating phase stopped\n");
+			ctimer_stop(&green_led);
+			phase = INITIAL_PHASE;
+			sendMsg(CANCEL_OK,&basestation_addr,NULL);
+			break;
+		case COOKING_PHASE:
+			LOG_INFO("Cooking phase stopped\n");
+			ctimer_stop(&b_leds);
+			phase = INITIAL_PHASE;
+			sendMsg(CANCEL_OK,&basestation_addr,NULL);
+			break;
+		case PREPARATION_COMPLETED:
+			LOG_INFO("Prepartion completed, operation cannot be stopped\n");
+			sendMsg(CANCEL_ERR,&basestation_addr,NULL);
+			break;
+		default:
+			LOG_INFO("Phase error\n");
+			break;
+	}
+}
+
 
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
@@ -166,49 +234,25 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	}
 
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
-		//uint8_t op = *(uint8_t *)data;
+		uint8_t op = *(uint8_t *)data;
 		char* content = ((char*)data)+1;
 		char received_data[strlen((char *)content) + 1];
 		if(len == strlen((char *)data) + 1) 
 			memcpy(&received_data, content, strlen((char *)content) + 1);
 		
 		//splitting of the received string temperature,cooking_time
-		char delim[] = ",";
-		char* ptr = strtok(content,delim);
-		oven_degree = atoi(ptr);
-		bool error = false;
-		
-		if(oven_degree < 50 || oven_degree > 250){
-			LOG_INFO("Temperature not correct \n");
-			error = true;
+		switch(op){
+			case START_OPERATION:
+				handleStartOperation(content);
+				break;
+			case CANCEL_OPERATION:
+				handleCancelOperation();
+				break;
+			default:
+				LOG_INFO("Unrecognized code\n");
+				break;
 		}
-
-		ptr = strtok(NULL,delim);
-		if(ptr == NULL){
-			LOG_INFO("Format error: not enough parameters \n");
-			error = true;
-		}
-
-		oven_time = atoi(ptr);
-		if(oven_time <= 0 || oven_time > 300){
-			LOG_INFO("Cooking time not correct\n");
-			error = true;
-		}
-
-		ptr = strtok(NULL,delim);
-		if(ptr != NULL){
-			LOG_INFO("Format error: too many parameters \n");
-			error = true;
-		}
-
-		if(error){
-			sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
-			return;
-		}
-		LOG_INFO("oven_degree: %d\n",oven_degree);
-		LOG_INFO("oven_time: %d\n",oven_time);
-		sendMsg(OPERATION_OK,&basestation_addr,NULL);	
-		start_preparation();
+	
 	}
 
 }

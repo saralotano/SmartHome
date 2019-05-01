@@ -232,6 +232,29 @@ void handle_serial_line(char* data){
 			return;
 		}
 
+		if(!strcmp(data,"status")){
+			if(oven_sync){
+				if(ovenBusy){
+					printf("Oven is busy\n");
+				}else{
+					printf("Oven is ready to be used\n");
+				}
+			}else{
+				printf("Oven is not connected\n");
+			}
+
+			if(window_sync){
+				if(windowBusy){
+					printf("Window is busy\n");
+				}else{
+					printf("Window is ready to be used\n");
+				}
+			}else{
+				printf("Window is not connected\n");
+			}
+			return;
+		}
+
 		printf("Error: Command not found \n");
 
 	}else{
@@ -302,10 +325,10 @@ void discoverNodes(){
 			firstTime = false;
 		}		
 		else
-			ctimer_reset(&reactive_broad_timer);	
+			ctimer_restart(&reactive_broad_timer);	
 	}
 	else
-		ctimer_reset(&broad_timer);
+		ctimer_restart(&broad_timer);
 }
 
 void broadtimeCallback(){

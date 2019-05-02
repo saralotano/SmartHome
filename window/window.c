@@ -1,25 +1,25 @@
 #include "contiki.h"
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
+#include "os/dev/leds.h"
+//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
+//#include "os/dev/button-hal.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "sys/log.h"
 #include "sys/clock.h"
+#include "sys/ctimer.h"
+#include "sys/etimer.h"
+//#include "batmon-sensor.h" // non c'è il batmon sensor su cooja
+#include "random.h"
 #include "parameters.h"
 
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
-#define SEND_INTERVAL (8 * CLOCK_SECOND)
-#define SEND_INTERVAL_BRO (13 * CLOCK_SECOND)
 
 
-
-
-
-/*static linkaddr_t dest_addr = {{ 0x0000, 0x0012, 0x004b, 0x0000, 0x000f, 0x0082, 0x0000, 0x0002 }};
-static int bro_period = 0;
-static int uni_period = 0;*/
-linkaddr_t basestation;
+static linkaddr_t basestation;
 
 
 PROCESS(window_proc, "window_proc");
@@ -54,10 +54,9 @@ void node_sync(){
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	LOG_INFO("input_callback\n");
-	//LORENZO
 	if(linkaddr_cmp(dest, &linkaddr_null)){
-		//BROADCAST MSG received
 		LOG_INFO("Broadcast received\n");
+		leds_off(LEDS_RED);
 		basestation = *src;
 		node_sync();
 	}
@@ -103,6 +102,7 @@ PROCESS_THREAD(window_proc, ev, data){
 
 	LOG_INFO("prima di nullnet\n");
 	nullnet_set_input_callback(input_callback);
+	leds_on(LEDS_RED);
 
 	//while(1);
 

@@ -228,6 +228,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 	if(linkaddr_cmp(dest, &linkaddr_null)){
 		LOG_INFO("Broadcast received\n");
+		leds_off(LEDS_RED);
 		basestation_addr = *src;
 		node_sync();
 		return;
@@ -261,6 +262,7 @@ PROCESS_THREAD(oven_proc, ev, data){
 
 	PROCESS_BEGIN();
 	nullnet_set_input_callback(input_callback);
+	leds_on(LEDS_RED);
 
 	/* //questa parte si occupa della gestione degli eventi legati ai buttons
 

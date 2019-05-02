@@ -26,6 +26,7 @@ static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
 static int num_sync_nodes = 0;	
 static int num_sync_attempts = 0;	
+static int number_nodes = 0;
 
 void broadtimeCallback();
 
@@ -55,7 +56,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 
 	LOG_INFO("Number of synchronized nodes: %d \n", num_sync_nodes);
 
-	if(num_sync_nodes == NUMBER_NODES){
+	if(num_sync_nodes == number_nodes){
 		LOG_INFO("All the nodes are correctly synchronized \n");
 		ctimer_stop(&broad_timer);
 		leds_on(LEDS_GREEN);
@@ -254,8 +255,17 @@ void handle_serial_line(char* data){
 			}
 			return;
 		}
-
-		printf("Error: Command not found \n");
+		if(number_nodes > 0)
+			printf("Error: Command not found \n");
+		else{
+			number_nodes = atoi(data);
+			if(number_nodes == 0 || number_nodes < 0){
+				number_nodes = 0;
+				printf("Error: Number of nodes not correct\n");
+			}
+			else
+				LOG_INFO("Number of sensor nodes = %d\n", number_nodes);
+		}
 
 	}else{
 
@@ -273,7 +283,7 @@ void handle_serial_line(char* data){
 				}
 			}
 
-		}else{//receiving command for the window
+		}else{//receiving command for the window	
 
 			if(!strcmp(data,"cancel")){
 				LOG_INFO("Cancel of communication \n");
@@ -289,8 +299,6 @@ void handle_serial_line(char* data){
 		}
 
 	}
-
-	
 
 }
 
@@ -344,12 +352,20 @@ PROCESS_THREAD(basestation_proc, ev, data){
 	//serial_line_init();
 	leds_on(LEDS_RED);
 	nullnet_set_input_callback(input_callback);
-	ctimer_set(&broad_timer,CLOCK_SECOND,discoverNodes,NULL);
+
+	printf("Insert the number of sensor nodes\n");
 
 	while(1){
 		PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);
-		printf("received: %s\n",(char*)data);
+		//printf("received: %s\n",(char*)data);
 		handle_serial_line((char*)data);
+
+		if(number_nodes > 0 && num_sync_nodes != number_nodes){
+			ctimer_set(&broad_timer,CLOCK_SECOND,discoverNodes,NULL);
+		}
+		else if(num_sync_nodes != number_nodes){
+			printf("Insert the number of sensor nodes\n");
+		}
 	}
 
 	PROCESS_END();

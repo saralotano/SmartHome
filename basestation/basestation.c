@@ -21,6 +21,7 @@ static struct ctimer broad_timer;
 static struct ctimer reactive_broad_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
+static bool settingOpenWindow = false;
 static bool window_sync = false;
 static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
@@ -75,6 +76,7 @@ void handleOperationOK(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		LOG_INFO("The window has correctly received all the parameters. \n");
+		settingOpenWindow = false;
 	}
 
 	//LOG_INFO("Operazione andata a buon fine \n");
@@ -90,6 +92,7 @@ void handleOperationError(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		windowBusy = false;
+		settingOpenWindow = false;
 		LOG_INFO("The window did not correctly received all the parameters. \n");
 	}
 
@@ -199,7 +202,45 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	return;
 }
 
+void checkMsgToWindow(char* data){
 
+	LOG_INFO("Dentro checkMsgToWindow \n");
+	bool operationEnded = false;
+
+	if(settingOpenWindow){
+		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
+		}else{
+			printf("Check the format of inserted data\n");
+		}		
+	}
+
+	else{
+		if(!strcmp(data,"open")){
+			LOG_INFO("Open window \n");
+			sendMsg(OPEN_WINDOW,&window_addr,NULL);
+			operationEnded = true;
+		}
+		else if(!strcmp(data,"close")){
+			LOG_INFO("Close window\n");
+			operationEnded = true;
+			sendMsg(CLOSE_WINDOW,&window_addr,NULL);
+		
+		}
+	
+		else if(!strcmp(data,"setTimer")){
+			LOG_INFO("Set Timer \n");
+			settingOpenWindow = true;
+		}
+		else
+			LOG_INFO("Unrecognized command \n");
+	
+		if(operationEnded){
+			windowBusy = false;
+			basestationBusy = false;
+		}
+	}
+}
 
 
 void handle_serial_line(char* data){
@@ -207,6 +248,10 @@ void handle_serial_line(char* data){
 	if(!basestationBusy){
 		//LOG_INFO("Basestation available \n");
 		if(!strcmp(data,"oven") && oven_sync){
+			if(ovenBusy){
+				LOG_INFO("Selected device is busy, please wait until the end of the operation or cancel it \n");
+				return;
+			}
 			LOG_INFO("Selected device: OVEN\n");
 			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
 			printf("Example: 180,30\n");			
@@ -290,11 +335,13 @@ void handle_serial_line(char* data){
 				windowBusy = false;
 				basestationBusy = false;
 			}else{
-				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+				/*if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 					sendMsg(START_OPERATION,&window_addr,data);
 				}else{
 					printf("Check the format of inserted data\n");
-				}
+				}*/
+
+				checkMsgToWindow(data);
 			}
 		}
 

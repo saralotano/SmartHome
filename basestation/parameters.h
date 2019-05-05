@@ -9,3 +9,6 @@
 #define CANCEL_OPERATION 7
 #define CANCEL_OK 8
 #define CANCEL_ERR 9
+#define OPEN_WINDOW 10
+#define CLOSE_WINDOW 11
+#define SET_TIMER_WINDOW 12

@@ -19,12 +19,32 @@
 #define LOG_LEVEL LOG_LEVEL_INFO
 
 
-static linkaddr_t basestation;
+static linkaddr_t basestation_addr;
+bool alreadySynchronized = false;
 
 
 PROCESS(window_proc, "window_proc");
 
 AUTOSTART_PROCESSES(&window_proc);
+
+void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
+
+	uint8_t size;
+	if(content == NULL)
+		size = 0;
+	else
+		size = strlen(content) + 1; 
+	char msg[size + 1];
+	msg[0] = (char)op;
+	nullnet_len = size + 1;
+
+	if(size != 0)
+		memcpy(&msg[1],content,nullnet_len-1);
+
+	nullnet_buf = (uint8_t *)msg;
+	NETSTACK_NETWORK.output(dest);
+	return;
+}
 
 void node_sync(){
 	/*
@@ -45,24 +65,111 @@ void node_sync(){
 
 	memcpy(&msg[1],content,nullnet_len-1);
 	nullnet_buf = (uint8_t *)msg;
-	NETSTACK_NETWORK.output(&basestation);
+	NETSTACK_NETWORK.output(&basestation_addr);
 
 	//char received_data[strlen((char *)content) + 1];
 	//LOG_INFO("op is %d and content is \"%s\"\n",(int)op,content);
 	return;
 }
 
+void handeOpenWindow(){
+	LOG_INFO("Open Window \n");
+	return;
+}
+
+
+void handleCloseWindow(){
+	LOG_INFO("Close Window \n");
+	return;
+}
+
+void handleSetTimer(char* content){
+	LOG_INFO("handleSetTimer \n");
+	char delim[] = ":";
+	char* ptr = strtok(content,delim);
+	uint8_t hours = atoi(ptr);
+	bool error = false;
+		
+	if(hours < 0 || hours > 23){
+		LOG_INFO("hours not correct \n");
+		error = true;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr == NULL){
+		LOG_INFO("Format error: not enough parameters \n");
+		error = true;
+	}
+
+	uint8_t minutes = atoi(ptr);
+	
+	if(minutes < 0 || minutes > 59){
+		LOG_INFO("Cooking time not correct\n");
+		error = true;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr != NULL){
+		LOG_INFO("Format error: too many parameters \n");
+		error = true;
+	}
+
+	if(error){
+		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
+		return;
+	}
+
+	if(!hours && !minutes){
+		handeOpenWindow();
+		return;
+	}
+
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
+	sendMsg(OPERATION_OK,&basestation_addr,NULL);	
+	//setTimer(hours,minutes);
+}
+
+
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	LOG_INFO("input_callback\n");
-	if(linkaddr_cmp(dest, &linkaddr_null)){
+	
+	if(linkaddr_cmp(dest, &linkaddr_null) && !alreadySynchronized){
 		LOG_INFO("Broadcast received\n");
 		leds_off(LEDS_RED);
-		basestation = *src;
+		basestation_addr = *src;
 		node_sync();
+		alreadySynchronized = true;
 	}
 
 	
+	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
+		uint8_t op = *(uint8_t *)data;
+		char* content = ((char*)data)+1;
+		char received_data[strlen((char *)content) + 1];
+		if(len == strlen((char *)data) + 1) 
+			memcpy(&received_data, content, strlen((char *)content) + 1);
+		
+		//splitting of the received string temperature,cooking_time
+		switch(op){
+			case OPEN_WINDOW:
+				handeOpenWindow();
+				break;
+			
+			case CLOSE_WINDOW:
+				handleCloseWindow();
+				break;
 
+			case SET_TIMER_WINDOW:
+				handleSetTimer(content);
+				break;
+			
+			default:
+				LOG_INFO("Unrecognized code\n");
+				break;
+		}
+	
+	}
 
 	/*char received_data[strlen((char*)data)+1];
 	LOG_INFO("input_callback\n");

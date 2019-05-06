@@ -20,10 +20,16 @@
 
 
 static linkaddr_t basestation_addr;
+
 static struct ctimer alarm;
+static struct ctimer checkInfoEnvironment;
+static struct ctimer noCheckInfoEnvironment;
+
 static int userTemperature = DEFAULT_TEMPERATURE;
 static int userHumidity = DEFAULT_HUMIDITY;
+
 bool alreadySynchronized = false;
+bool windowOpened = false;
 
 
 PROCESS(window_proc, "window_proc");
@@ -63,20 +69,75 @@ void node_sync(){
 	return;
 }
 
+void noEnvironmentCallback(){
+	LOG_INFO("riattivo il timer per ambiente \n");
+	ctimer_restart(&checkInfoEnvironment);
+}
+
+void openWindow(){
+	LOG_INFO("Open Window \n");
+	windowOpened = true;
+	leds_on(LEDS_GREEN);
+	leds_off(LEDS_RED);
+	ctimer_stop(&checkInfoEnvironment);	
+	ctimer_restart(&noCheckInfoEnvironment);				
+
+}
+
+void closeWindow(){
+	LOG_INFO("Close Window \n");
+	windowOpened = false;
+	leds_off(LEDS_GREEN);
+	leds_on(LEDS_RED);
+	ctimer_stop(&checkInfoEnvironment);
+	ctimer_restart(&noCheckInfoEnvironment);				
+}
+
+
+void environmentCallback(){
+
+	/*SENSORS_ACTIVATE(batmon_sensor);
+	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//set the current temperature of the oven
+	SENSORS_DEACTIVATE(batmon_sensor);*/
+
+	uint8_t currentTemp = random_rand()%30;
+	LOG_INFO("Dentro environmentCallback, currentTemp: %d\n",currentTemp);
+	bool changeStatus = false;
+
+	if(windowOpened){
+		if(currentTemp < userTemperature){
+			changeStatus = true;
+			closeWindow();
+		}
+	}
+	else
+		if(currentTemp > userTemperature){
+			changeStatus = true;
+			openWindow();
+		}
+
+	if(!changeStatus){
+		//ctimer_stop(&checkInfoEnvironment);
+		ctimer_restart(&checkInfoEnvironment);
+	}
+}
+
+
+
 void alarmCallback(){	//mandare una specie di operation Completed
-	LOG_INFO("Open roller shutter \n");
+	LOG_INFO("Lift roller shutter \n");
 	return;
 }
 
 void handleOpenWindow(){	//mandare un ACK alla base station
-	LOG_INFO("Open Window \n");
+	openWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 
 
 void handleCloseWindow(){	//mandare un ACK alla base station
-	LOG_INFO("Close Window \n");
+	closeWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
@@ -94,59 +155,30 @@ void handleSetHumidity(char* content){
 }
 
 void handleSetTimer(char* content){
+	printf("stampo content in handleSetTimer %s\n", content);
 	LOG_INFO("handleSetTimer \n");
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
-	bool error = false;
+	//bool error = false;
 		
-	if(hours < 0 || hours > 23){
-		LOG_INFO("hours not correct \n");
-		error = true;
-	}
-
 	ptr = strtok(NULL,delim);
-	if(ptr == NULL){
-		LOG_INFO("Format error: not enough parameters \n");
-		error = true;
-	}
-
 	uint8_t minutes = atoi(ptr);
 	
-	if(minutes < 0 || minutes > 59){
-		LOG_INFO("Alarm time not correct\n");
-		error = true;
-	}
-
-	ptr = strtok(NULL,delim);
-	if(ptr != NULL){
-		LOG_INFO("Format error: too many parameters \n");
-		error = true;
-	}
-
-	if(error){
-		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
-		return;
-	}
-
-	if(!hours && !minutes){	
-		handleOpenWindow();
-		return;
-	}
-
 	LOG_INFO("hours: %d\n",hours);
 	LOG_INFO("minutes: %d\n",minutes);
-	sendMsg(OPERATION_OK,&basestation_addr,NULL);	
 
 	//int seconds = minutes*60 + hours*3600;
 
-	ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);	//modificare minutes con seconds
+	sendMsg(OPERATION_OK,&basestation_addr,NULL);		
+	ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);
+		//modificare minutes con seconds
 }
 
 void handleCancelOperation(){
 	LOG_INFO("Parameters reset\n");
-	userTemperature = DEFAULT_TEMPERATURE;
-	userHumidity = DEFAULT_HUMIDITY;
+	//userTemperature = DEFAULT_TEMPERATURE;
+	//userHumidity = DEFAULT_HUMIDITY;
 	ctimer_stop(&alarm);
 	sendMsg(CANCEL_OK,&basestation_addr,NULL);
 }
@@ -213,6 +245,12 @@ PROCESS_THREAD(window_proc, ev, data){
 	LOG_INFO("prima di nullnet\n");
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
+
+	//tempo momentaneo
+	ctimer_set(&checkInfoEnvironment,5*CLOCK_SECOND,environmentCallback,NULL);
+	ctimer_set(&noCheckInfoEnvironment,20*CLOCK_SECOND,noEnvironmentCallback,NULL);
+	ctimer_stop(&noCheckInfoEnvironment);
+
 
 
 	PROCESS_END();

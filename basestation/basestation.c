@@ -22,6 +22,7 @@ static struct ctimer reactive_broad_timer;
 static struct ctimer ACK_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
+static bool statusWindow = false;
 static bool settingOpenWindow = false, settingTemperature = false, settingHumidity = false;
 static bool window_sync = false;
 static bool settingParametersOven = false;
@@ -85,7 +86,8 @@ void handleOperationOK(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
-		windowSet = true;
+		if(statusWindow)
+			windowSet = true;
 		//N.B. cosi non viene gestito il caso in cui voglio annullare l'apertura/chiusura finestra
 	}
 
@@ -124,6 +126,7 @@ void handleOperationCompleted(const linkaddr_t* src){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowBusy = false;
+		statusWindow = false;
 		printf("The window is ready to be used\n");
 	}
 	//PER LA FINESTRA OPERATION OK EQUIVALE A OPERATION COMPLETED
@@ -139,6 +142,7 @@ void handleCancelOK(const linkaddr_t* src){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowSet = false;
+		statusWindow = false;
 		printf("The window is no longer used\n");
 	}
 
@@ -271,6 +275,75 @@ void checkMsgToWindow(char* data){
 	//}
 }
 
+bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes){
+	//LOG_INFO("handleSetTimer \n");
+	char delim[] = ":";
+	char* ptr = strtok(content,delim);
+	if(ptr == NULL){
+		printf("Format error: unknown parameters \n");
+		return false;
+	}
+
+	uint8_t hours = atoi(ptr);
+	if(!hours){
+		if(strcmp(ptr,"0") && strcmp(ptr,"00")){
+			printf("Format error: hours not correct \n");
+			return false;
+		}
+	}
+
+	if(hours < 0 || hours > 23){
+		printf("Format error: hours not correct \n");
+		return false;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr == NULL){
+		printf("Format error: not enough parameters \n");
+		return false;
+	}
+
+	uint8_t minutes = atoi(ptr);
+	if(!minutes){
+		if(strcmp(ptr,"0") && strcmp(ptr,"00")){
+			printf("Format error: minutes not correct \n");
+			return false;
+		}
+	}
+
+	
+	if(minutes < 0 || minutes > 59){
+		printf("Format error: alarm time not correct\n");
+		return false;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr != NULL){
+		printf("Format error: too many parameters \n");
+		return false;
+	}
+
+	/*if(error){
+		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
+		return;
+	}
+
+	if(!hours && !minutes){	
+		handleOpenWindow();
+		return;
+	}*/
+	
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
+	//sendMsg(OPERATION_OK,&basestation_addr,NULL);	
+
+	//int seconds = minutes*60 + hours*3600;
+
+	//ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);	//modificare minutes con seconds
+	*retHours = hours;
+	*retMinutes = minutes;
+	return true;
+}
 
 bool checkParametersOven(char* content){
 
@@ -378,7 +451,7 @@ void handleCommunicationWithOven(char* data){
 	}
 }
 
-void handleCommunicationWithWindow(char * data){
+void handleCommunicationWithWindow(char* data){
 	if(settingTemperature){
 		if(!strcmp(data,"back")){
 			selectDevice();
@@ -427,9 +500,15 @@ void handleCommunicationWithWindow(char * data){
 			communicationWithWindow = false;
 			return;
 		}
-		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
-			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
+		char parametersWindow[strlen(data)+1];
+		strcpy(parametersWindow,data);
+		uint8_t hours,minutes;
+		if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
+			LOG_INFO("superato il checkParametersWindow \n");
+			sendMsg(SET_TIMER_WINDOW,&window_addr,parametersWindow);
 			waitingForACK = true;
+			if(hours || minutes)
+				statusWindow = true;
 			settingOpenWindow = false;
 			ctimer_restart(&ACK_timer);
 		}else{
@@ -657,6 +736,7 @@ void blinkGreenLedCallback(){
 void ackTimerCallback(){
 	if(communicationWithWindow){
 		communicationWithWindow = false;
+		statusWindow = false;
 		window_sync = false;
 		printf("ERROR: Communication with window failed \n");
 	}

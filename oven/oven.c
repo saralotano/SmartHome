@@ -163,36 +163,8 @@ void handleStartOperation(char* content){
 	char delim[] = ",";
 	char* ptr = strtok(content,delim);
 	oven_degree = atoi(ptr);
-	bool error = false;
-		
-	if(oven_degree < 50 || oven_degree > 250){
-		LOG_INFO("Temperature not correct \n");
-		error = true;
-	}
-
 	ptr = strtok(NULL,delim);
-	if(ptr == NULL){
-		LOG_INFO("Format error: not enough parameters \n");
-		error = true;
-	}
-
 	oven_time = atoi(ptr);
-	
-	if(oven_time <= 0 || oven_time > 300){
-		LOG_INFO("Cooking time not correct\n");
-		error = true;
-	}
-
-	ptr = strtok(NULL,delim);
-	if(ptr != NULL){
-		LOG_INFO("Format error: too many parameters \n");
-		error = true;
-	}
-
-	if(error){
-		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
-		return;
-	}
 	LOG_INFO("oven_degree: %d\n",oven_degree);
 	LOG_INFO("oven_time: %d\n",oven_time);
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);	

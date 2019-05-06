@@ -19,10 +19,14 @@ static linkaddr_t oven_addr;
 static linkaddr_t window_addr;
 static struct ctimer broad_timer;
 static struct ctimer reactive_broad_timer;
+static struct ctimer ACK_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
 static bool settingOpenWindow = false;
 static bool window_sync = false;
+static bool settingParametersOven = false;
+static bool communicationWithOven = false, communicationWithWindow = false;
+static bool waitingForACK = false;
 static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
 static int num_sync_nodes = 0;	
@@ -30,6 +34,7 @@ static int num_sync_attempts = 0;
 static int number_nodes = 0;
 
 void broadtimeCallback();
+void selectDevice();
 
 PROCESS(basestation_proc, "basestation");
 
@@ -71,20 +76,24 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
-		LOG_INFO("The oven has correctly received all the parameters. \n");
+		printf("The oven has correctly received all the parameters. \n");
+		ovenBusy = true;
 	}
 
 	if(linkaddr_cmp(src,&window_addr)){
-		LOG_INFO("The window has correctly received all the parameters. \n");
+		printf("The window has correctly received all the parameters. \n");
 		settingOpenWindow = false;
 	}
 
 	//LOG_INFO("Operazione andata a buon fine \n");
+	ctimer_stop(&ACK_timer);
+	waitingForACK = false;
 	basestationBusy = false;
+	selectDevice();
 	return;
 }
 
-void handleOperationError(const linkaddr_t* src){
+/*void handleOperationError(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
 		ovenBusy = false;
 		LOG_INFO("The oven did not correctly received all the parameters. \n");
@@ -100,7 +109,7 @@ void handleOperationError(const linkaddr_t* src){
 	basestationBusy = false;
 	return;
 }
-
+*/
 
 
 void handleOperationCompleted(const linkaddr_t* src){
@@ -128,11 +137,20 @@ void handleCancelOK(const linkaddr_t* src){
 		printf("The window is no longer used\n");
 	}
 
+	waitingForACK = false;
+	basestationBusy = false;
+	ctimer_stop(&ACK_timer);
+	selectDevice();
+
 	return;
 }
 
 void handleCancelErr(){
 	printf("The preparation is already finished, cannot cancel the operation\n");
+	waitingForACK = false;
+	basestationBusy = false;
+	ctimer_stop(&ACK_timer);
+	selectDevice();
 	return;
 }
 
@@ -161,9 +179,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			handleOperationOK(src);
 			break;
 
-		case OPERATION_ERROR:
+		/*case OPERATION_ERROR:
 			handleOperationError(src);
-			break;
+			break;*/
 
 		case OPERATION_COMPLETED:
 			handleOperationCompleted(src);	
@@ -243,7 +261,173 @@ void checkMsgToWindow(char* data){
 }
 
 
+bool checkParametersOven(char* content){
+
+	if(!atoi(content)){
+			printf("Format error: unknown parameters \n");
+			return false;
+	}
+
+	char delim[] = ",";
+	char* ptr = strtok(content,delim);
+	if(ptr == NULL){
+		printf("Format error: unknown parameters \n");
+		return false;
+	}
+	int oven_time, oven_degree;
+	oven_degree = atoi(ptr);
+	//bool error = false;
+		
+	if(oven_degree < 50 || oven_degree > 250){
+		printf("Format error: temperature not correct \n");
+		return false;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr == NULL){
+		printf("Format error: not enough parameters\n");
+		return false;
+	}
+
+	oven_time = atoi(ptr);
+	
+	if(oven_time <= 0 || oven_time > 300){
+		printf("Format error: cooking time not correct\n");
+		return false;
+	}
+
+	ptr = strtok(NULL,delim);
+	if(ptr != NULL){
+		printf("Format error: too many parameters \n");
+		return false;
+	}
+
+	LOG_INFO("checkParametersOven OK \n");
+
+	return true;
+}
+
+void handleCommunicationWithOven(char* data){
+
+	if(settingParametersOven){
+		if(!strcmp(data,"back")){
+			selectDevice();
+			settingParametersOven = false;
+			basestationBusy = false;
+			communicationWithOven = false;
+			return;
+		}
+
+		char parametersOven[strlen(data)+1];
+		strcpy(parametersOven,data);
+		if(checkParametersOven(data)){
+			sendMsg(START_OPERATION,&oven_addr,parametersOven);
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);			
+			settingParametersOven = false; 
+		}
+		
+		return;
+	}
+
+	else{
+	
+		if(!strcmp(data,"cancel")){
+	
+			if(ovenBusy){
+
+				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
+				waitingForACK = true;
+				ctimer_restart(&ACK_timer);			
+
+			}
+			else{
+				printf("Oven is not busy \n");
+				return;
+				//STAMPA DISPOSITIVI DISPONIBILI
+			}
+			return;
+		}
+
+		if(!strcmp(data,"back")){
+			basestationBusy = false;
+			communicationWithOven = false;
+			selectDevice();	
+			return;		
+		}
+	
+		if(!strcmp(data,"setParameters") || !strcmp(data,"setparameters")){
+			settingParametersOven = true;
+			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
+			printf("Example: 180,30\n");
+			return;			
+				
+		}
+	
+		printf("ERROR: Command not found\n");
+	}
+}
+
+void selectDevice(){
+	printf("Select a device to comunicate with \n");
+}
+
 void handle_serial_line(char* data){
+
+	if(waitingForACK){
+		printf("Wait until the end of the operation \n");
+		return;
+	}
+
+	if(!basestationBusy){
+		if(!strcmp(data,"oven") && oven_sync){
+			/*LOG_INFO("Selected device: OVEN\n");
+			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
+			printf("Example: 180,30\n");*/
+			//printCommandsInfoOnOven();
+			printf("Available commands:\n -back \n -cancel(only if oven is working) \n -setParameters \n");
+			communicationWithOven = true;
+			basestationBusy = true;
+			return;
+		}
+		if(!strcmp(data,"window") && window_sync){
+			//printCommandsInfoOnWindow();
+			//LOG_INFO("Selected device: WINDOW\n");
+			communicationWithWindow = true;
+			basestationBusy = true;
+			return;
+		}
+
+		if(number_nodes > 0)
+			printf("Error: Command not found \n");
+		else{
+			number_nodes = atoi(data);
+			if(number_nodes == 0 || number_nodes < 0){
+				number_nodes = 0;
+				printf("Error: Number of nodes not correct\n");
+			}
+			else
+				LOG_INFO("Number of sensor nodes = %d\n", number_nodes);
+		}
+	}
+
+	//BASESTATION BUSY
+	else{
+		if(communicationWithOven){
+			handleCommunicationWithOven(data);
+			return;
+		}
+		if(communicationWithWindow){
+			//handleCommunicationWithWindow(data);
+			return;
+		}
+
+	}
+
+}
+
+
+/*void handle_serial_line(char* data){
 
 	if(!basestationBusy){
 		//LOG_INFO("Basestation available \n");
@@ -252,9 +436,7 @@ void handle_serial_line(char* data){
 				LOG_INFO("Selected device is busy, please wait until the end of the operation or cancel it \n");
 				return;
 			}
-			LOG_INFO("Selected device: OVEN\n");
-			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
-			printf("Example: 180,30\n");			
+			LOG_INFO("Selected device: OVEN\n");			
 			ovenBusy = true;
 			basestationBusy = true;
 			return;
@@ -335,11 +517,11 @@ void handle_serial_line(char* data){
 				windowBusy = false;
 				basestationBusy = false;
 			}else{
-				/*if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 					sendMsg(START_OPERATION,&window_addr,data);
 				}else{
 					printf("Check the format of inserted data\n");
-				}*/
+				}
 
 				checkMsgToWindow(data);
 			}
@@ -347,7 +529,7 @@ void handle_serial_line(char* data){
 
 	}
 
-}
+}*/
 
 void blinkGreenLedCallback(){
 	//LOG_INFO("dentro blinkGreenLedCallback \n");
@@ -355,6 +537,26 @@ void blinkGreenLedCallback(){
 	ctimer_restart(&green_led);
 }
 
+
+
+void ackTimerCallback(){
+	if(communicationWithWindow){
+		communicationWithWindow = false;
+		printf("ERROR: Comunication with window failed \n");
+	}
+
+	if(communicationWithOven){
+		communicationWithOven = false;
+		oven_sync = false;
+		num_sync_nodes--;
+		num_sync_attempts = 0;
+		ctimer_restart(&broad_timer);
+		printf("ERROR: Comunication with oven failed \n");
+	}
+
+	basestationBusy = false;
+	waitingForACK = false;
+}
 
 void discoverNodes(){
 	sendMsg(DISCOVER_REQ,NULL,NULL);
@@ -401,6 +603,9 @@ PROCESS_THREAD(basestation_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 
 	printf("Insert the number of sensor nodes\n");
+
+	ctimer_set(&ACK_timer,5 * CLOCK_SECOND, ackTimerCallback, NULL);
+	ctimer_stop(&ACK_timer);
 
 	while(1){
 		PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);

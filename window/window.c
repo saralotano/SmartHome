@@ -20,6 +20,7 @@
 
 
 static linkaddr_t basestation_addr;
+static struct ctimer alarm;
 bool alreadySynchronized = false;
 
 
@@ -72,13 +73,18 @@ void node_sync(){
 	return;
 }
 
-void handeOpenWindow(){
+void alarmCallback(){	//mandare una specie di operation Completed
+	LOG_INFO("Open roller shutter \n");
+	return;
+}
+
+void handleOpenWindow(){	//mandare un ACK alla base station
 	LOG_INFO("Open Window \n");
 	return;
 }
 
 
-void handleCloseWindow(){
+void handleCloseWindow(){	//mandare un ACK alla base station
 	LOG_INFO("Close Window \n");
 	return;
 }
@@ -104,7 +110,7 @@ void handleSetTimer(char* content){
 	uint8_t minutes = atoi(ptr);
 	
 	if(minutes < 0 || minutes > 59){
-		LOG_INFO("Cooking time not correct\n");
+		LOG_INFO("Alarm time not correct\n");
 		error = true;
 	}
 
@@ -119,15 +125,19 @@ void handleSetTimer(char* content){
 		return;
 	}
 
-	if(!hours && !minutes){
-		handeOpenWindow();
+	if(!hours && !minutes){	
+		handleOpenWindow();
 		return;
 	}
 
 	LOG_INFO("hours: %d\n",hours);
 	LOG_INFO("minutes: %d\n",minutes);
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);	
-	//setTimer(hours,minutes);
+
+	//setTimer(hours,minutes); cancellare
+	//int seconds = minutes*60 + hours*3600;
+
+	ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);	//modificare minutes con seconds
 }
 
 
@@ -153,7 +163,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		//splitting of the received string temperature,cooking_time
 		switch(op){
 			case OPEN_WINDOW:
-				handeOpenWindow();
+				handleOpenWindow();
 				break;
 			
 			case CLOSE_WINDOW:

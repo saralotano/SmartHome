@@ -226,7 +226,7 @@ void handleCancelOperation(){
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
-	if(linkaddr_cmp(dest, &linkaddr_null)){
+	if(linkaddr_cmp(dest, &linkaddr_null)){	//modificare come in window
 		LOG_INFO("Broadcast received\n");
 		leds_off(LEDS_RED);
 		basestation_addr = *src;

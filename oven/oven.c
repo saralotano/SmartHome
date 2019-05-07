@@ -26,6 +26,7 @@ static struct ctimer red_led;
 static struct ctimer b_leds;
 static bool firstTimeBlinkRed = true;
 static bool buttonAvailable = false;
+static bool alreadySynchronized = false;
 static int current_temp = 0;
 static int oven_degree = 0;
 static int oven_time = 0;
@@ -226,11 +227,12 @@ void handleCancelOperation(){
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
-	if(linkaddr_cmp(dest, &linkaddr_null)){	//modificare come in window
+	if(linkaddr_cmp(dest, &linkaddr_null) && !alreadySynchronized){	
 		LOG_INFO("Broadcast received\n");
 		leds_off(LEDS_RED);
 		basestation_addr = *src;
 		node_sync();
+		alreadySynchronized = true;
 		return;
 	}
 

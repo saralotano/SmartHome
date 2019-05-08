@@ -12,3 +12,7 @@
 #define OPEN_WINDOW 10
 #define CLOSE_WINDOW 11
 #define SET_TIMER_WINDOW 12
+#define SET_TEMPERATURE 13
+#define SET_HUMIDITY 14
+#define DEFAULT_TEMPERATURE 18	 //expressed in Celsius degrees
+#define DEFAULT_HUMIDITY 35	 	 //expressed in percentage

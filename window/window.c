@@ -21,6 +21,8 @@
 
 static linkaddr_t basestation_addr;
 static struct ctimer alarm;
+static int userTemperature = DEFAULT_TEMPERATURE;
+static int userHumidity = DEFAULT_HUMIDITY;
 bool alreadySynchronized = false;
 
 
@@ -75,6 +77,18 @@ void handleOpenWindow(){	//mandare un ACK alla base station
 void handleCloseWindow(){	//mandare un ACK alla base station
 	LOG_INFO("Close Window \n");
 	return;
+}
+
+void handleSetTemperature(char* content){
+	userTemperature = atoi(content);
+	LOG_INFO("User userTemperature set to : %d degrees\n", userTemperature);
+	sendMsg(OPERATION_OK, &basestation_addr, NULL);
+}
+
+void handleSetHumidity(char* content){
+	userHumidity = atoi(content);
+	LOG_INFO("User userHumidity set to : %d %\n", userHumidity);
+	sendMsg(OPERATION_OK, &basestation_addr, NULL);
 }
 
 void handleSetTimer(char* content){
@@ -142,7 +156,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
 		uint8_t op = *(uint8_t *)data;
 		char* content = ((char*)data)+1;
-		char received_data[strlen((char *)content) + 1];
+		char received_data[strlen((char *)content) + 1];	//controllare se la usiamo o no e cambiare anche negli altri file
 		if(len == strlen((char *)data) + 1) 
 			memcpy(&received_data, content, strlen((char *)content) + 1);
 		
@@ -158,6 +172,14 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 			case SET_TIMER_WINDOW:
 				handleSetTimer(content);
+				break;
+
+			case SET_TEMPERATURE:
+				handleSetTemperature(content);
+				break;
+
+			case SET_HUMIDITY:
+				handleSetHumidity(content);
 				break;
 			
 			default:

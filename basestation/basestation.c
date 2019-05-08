@@ -368,8 +368,12 @@ void handleCommunicationWithOven(char* data){
 	}
 }
 
-void selectDevice(){
+void selectDevice(){	//cambiarla per renderla più generica
 	printf("Select a device to comunicate with \n");
+	if(oven_sync)
+		printf("\t - oven\n");
+	if(window_sync)
+		printf("\t - window\n");
 }
 
 void handle_serial_line(char* data){
@@ -381,10 +385,6 @@ void handle_serial_line(char* data){
 
 	if(!basestationBusy){
 		if(!strcmp(data,"oven") && oven_sync){
-			/*LOG_INFO("Selected device: OVEN\n");
-			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
-			printf("Example: 180,30\n");*/
-			//printCommandsInfoOnOven();
 			printf("Available commands:\n -back \n -cancel(only if oven is working) \n -setParameters \n");
 			communicationWithOven = true;
 			basestationBusy = true;

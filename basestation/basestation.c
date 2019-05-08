@@ -228,9 +228,9 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 void checkMsgToWindow(char* data){
 
 	LOG_INFO("Dentro checkMsgToWindow \n");
-	bool operationEnded = false;
+	//bool operationEnded = false;
 
-	if(settingOpenWindow){
+	/*if(settingOpenWindow){
 		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
 			waitingForACK = true;
@@ -238,28 +238,25 @@ void checkMsgToWindow(char* data){
 		}else{
 			printf("Check the format of inserted data\n");
 		}	
-		return;	
-	}
+	}*/
 
-	else{
+	//else{
 		if(!strcmp(data,"open")){
 			LOG_INFO("Open window \n");
 			sendMsg(OPEN_WINDOW,&window_addr,NULL);
 			waitingForACK = true;
 			ctimer_restart(&ACK_timer);
-			return;
 			//operationEnded = true;
 		}
 		else if(!strcmp(data,"close")){
 			LOG_INFO("Close window\n");
-			operationEnded = true;
+			//operationEnded = true;
 			sendMsg(CLOSE_WINDOW,&window_addr,NULL);
 			waitingForACK = true;
 			ctimer_restart(&ACK_timer);
-			return;
 		}
 	
-		else if(!strcmp(data,"setTimer")){
+		else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
 			LOG_INFO("Set Timer \n");
 			settingOpenWindow = true;
 		}/*
@@ -270,7 +267,7 @@ void checkMsgToWindow(char* data){
 			windowBusy = false;
 			basestationBusy = false;
 		}*/
-	}
+	//}
 }
 
 
@@ -421,6 +418,17 @@ void handleCommunicationWithWindow(char * data){
 		return;
 	}
 
+	if(settingOpenWindow){
+		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
+			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);
+		}else{
+			printf("Check the format of inserted data\n");
+		}	
+		return;
+	}
+
 	if(!strcmp(data,"back")){
 		basestationBusy = false;
 		communicationWithOven = false;
@@ -444,16 +452,6 @@ void handleCommunicationWithWindow(char * data){
 		return;
 	}
 
-	if(!strcmp(data,"open")){
-
-		return;
-	}
-
-	if(!strcmp(data,"close")){
-
-		return;
-	}
-
 	if(!strcmp(data,"setTemperature") || !strcmp(data,"settemperature")){
 		settingTemperature = true;
 		printf("Insert desired temperature expressed in °C \n");
@@ -466,7 +464,12 @@ void handleCommunicationWithWindow(char * data){
 		return;
 	}
 
-	printf("ERROR: Command not found\n");
+	
+
+	if(!strcmp(data,"close") || !strcmp(data,"open") || !strcmp(data,"setTimer") || !strcmp(data,"settimer"))//scrittura BRUTTISSIMA, SISTEMARE
+		checkMsgToWindow(data);
+	else
+		printf("ERROR: Command not found\n");
 }
 
 void selectDevice(){	//cambiarla per renderla più generica
@@ -493,7 +496,7 @@ void handle_serial_line(char* data){
 		}
 		if(!strcmp(data,"window") && window_sync){
 			printf("Available commands:\n -back \n -cancel(only if window has been set) \n -open \n");
-			printf(" -close \n -setTemperature \n -setHumidity \n");
+			printf(" -close \n -setTimer \n -setTemperature \n -setHumidity \n");
 			communicationWithWindow = true;
 			basestationBusy = true;
 			return;

@@ -70,12 +70,14 @@ void alarmCallback(){	//mandare una specie di operation Completed
 
 void handleOpenWindow(){	//mandare un ACK alla base station
 	LOG_INFO("Open Window \n");
+	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 
 
 void handleCloseWindow(){	//mandare un ACK alla base station
 	LOG_INFO("Close Window \n");
+	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 

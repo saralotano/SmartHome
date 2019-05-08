@@ -141,6 +141,14 @@ void handleSetTimer(char* content){
 	ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);	//modificare minutes con seconds
 }
 
+void handleCancelOperation(){
+	LOG_INFO("Parameters reset\n");
+	userTemperature = DEFAULT_TEMPERATURE;
+	userHumidity = DEFAULT_HUMIDITY;
+	ctimer_stop(&alarm);
+	sendMsg(CANCEL_OK,&basestation_addr,NULL);
+}
+
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	
@@ -180,6 +188,10 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 
 			case SET_HUMIDITY:
 				handleSetHumidity(content);
+				break;
+
+			case CANCEL_OPERATION:
+				handleCancelOperation();
 				break;
 			
 			default:

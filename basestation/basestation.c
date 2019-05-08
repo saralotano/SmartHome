@@ -22,11 +22,12 @@ static struct ctimer reactive_broad_timer;
 static struct ctimer ACK_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
-static bool settingOpenWindow = false;
+static bool settingOpenWindow = false, settingTemperature = false, settingHumidity = false;
 static bool window_sync = false;
 static bool settingParametersOven = false;
 static bool communicationWithOven = false, communicationWithWindow = false;
 static bool waitingForACK = false;
+static bool windowSet = false; //to know if there are parameters set on the window
 static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
 static int num_sync_nodes = 0;	
@@ -70,6 +71,8 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 		if(!firstTime){
 			ctimer_stop(&green_led);
 			ctimer_stop(&reactive_broad_timer);		
+		}else{
+			selectDevice();
 		}
 	}
 }
@@ -82,7 +85,8 @@ void handleOperationOK(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
-		settingOpenWindow = false;
+		windowSet = true;
+		//N.B. cosi non viene gestito il caso in cui voglio annullare l'apertura/chiusura finestra
 	}
 
 	//LOG_INFO("Operazione andata a buon fine \n");
@@ -122,6 +126,7 @@ void handleOperationCompleted(const linkaddr_t* src){
 		windowBusy = false;
 		printf("The window is ready to be used\n");
 	}
+	//PER LA FINESTRA OPERATION OK EQUIVALE A OPERATION COMPLETED
 
 	return;
 }
@@ -133,7 +138,7 @@ void handleCancelOK(const linkaddr_t* src){
 		printf("The oven is no longer used\n");
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
-		windowBusy = false;
+		windowSet = false;
 		printf("The window is no longer used\n");
 	}
 
@@ -228,35 +233,43 @@ void checkMsgToWindow(char* data){
 	if(settingOpenWindow){
 		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);
 		}else{
 			printf("Check the format of inserted data\n");
-		}		
+		}	
+		return;	
 	}
 
 	else{
 		if(!strcmp(data,"open")){
 			LOG_INFO("Open window \n");
 			sendMsg(OPEN_WINDOW,&window_addr,NULL);
-			operationEnded = true;
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);
+			return;
+			//operationEnded = true;
 		}
 		else if(!strcmp(data,"close")){
 			LOG_INFO("Close window\n");
 			operationEnded = true;
 			sendMsg(CLOSE_WINDOW,&window_addr,NULL);
-		
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);
+			return;
 		}
 	
 		else if(!strcmp(data,"setTimer")){
 			LOG_INFO("Set Timer \n");
 			settingOpenWindow = true;
-		}
+		}/*
 		else
 			LOG_INFO("Unrecognized command \n");
 	
 		if(operationEnded){
 			windowBusy = false;
 			basestationBusy = false;
-		}
+		}*/
 	}
 }
 
@@ -363,17 +376,105 @@ void handleCommunicationWithOven(char* data){
 			return;			
 				
 		}
-	
 		printf("ERROR: Command not found\n");
 	}
+}
+
+void handleCommunicationWithWindow(char * data){
+	if(settingTemperature){
+		if(!strcmp(data,"back")){
+			selectDevice();
+			settingTemperature = false;
+			basestationBusy = false;
+			communicationWithWindow = false;
+			return;
+		}
+		int temperature = atoi(data);
+		if(temperature){
+			sendMsg(SET_TEMPERATURE,&window_addr,data);
+			waitingForACK = true;
+			settingTemperature = false;
+			ctimer_restart(&ACK_timer);	
+		}else{
+			printf("ERROR: Temperature must be a number\n");
+		}
+		return;
+	}
+
+	if(settingHumidity){
+		if(!strcmp(data,"back")){
+			selectDevice();
+			settingTemperature = false;
+			basestationBusy = false;
+			communicationWithWindow = false;
+			return;
+		}
+		int humidity = atoi(data);
+		if(humidity){
+			sendMsg(SET_HUMIDITY,&window_addr,data);
+			waitingForACK = true;
+			settingHumidity = false;
+			ctimer_restart(&ACK_timer);	
+		}else{
+			printf("ERROR: Humidity must be a number\n");
+		}
+		return;
+	}
+
+	if(!strcmp(data,"back")){
+		basestationBusy = false;
+		communicationWithOven = false;
+		selectDevice();	
+		return;		
+	}
+
+	if(!strcmp(data,"cancel")){
+	
+		if(windowSet){
+			sendMsg(CANCEL_OPERATION,&window_addr,NULL);
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);			
+
+		}
+		else{
+			printf("Window has no parameters configured\n");
+			return;
+			//STAMPA DISPOSITIVI DISPONIBILI
+		}
+		return;
+	}
+
+	if(!strcmp(data,"open")){
+
+		return;
+	}
+
+	if(!strcmp(data,"close")){
+
+		return;
+	}
+
+	if(!strcmp(data,"setTemperature") || !strcmp(data,"settemperature")){
+		settingTemperature = true;
+		printf("Insert desired temperature expressed in °C \n");
+		return;
+	}
+
+	if(!strcmp(data,"setHumidity") || !strcmp(data,"sethumidity")){
+		settingHumidity = true;
+		printf("Insert desired percentage of humidity \n");
+		return;
+	}
+
+	printf("ERROR: Command not found\n");
 }
 
 void selectDevice(){	//cambiarla per renderla più generica
 	printf("Select a device to comunicate with \n");
 	if(oven_sync)
-		printf("\t - oven\n");
+		printf(" - oven\n");
 	if(window_sync)
-		printf("\t - window\n");
+		printf(" - window\n");
 }
 
 void handle_serial_line(char* data){
@@ -391,8 +492,8 @@ void handle_serial_line(char* data){
 			return;
 		}
 		if(!strcmp(data,"window") && window_sync){
-			//printCommandsInfoOnWindow();
-			//LOG_INFO("Selected device: WINDOW\n");
+			printf("Available commands:\n -back \n -cancel(only if window has been set) \n -open \n");
+			printf(" -close \n -setTemperature \n -setHumidity \n");
 			communicationWithWindow = true;
 			basestationBusy = true;
 			return;
@@ -418,7 +519,7 @@ void handle_serial_line(char* data){
 			return;
 		}
 		if(communicationWithWindow){
-			//handleCommunicationWithWindow(data);
+			handleCommunicationWithWindow(data);
 			return;
 		}
 

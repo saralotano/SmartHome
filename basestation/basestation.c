@@ -259,6 +259,7 @@ void checkMsgToWindow(char* data){
 		else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
 			LOG_INFO("Set Timer \n");
 			settingOpenWindow = true;
+			printf("Insert the timer for the roller shutter in format HH:MM\n");
 		}/*
 		else
 			LOG_INFO("Unrecognized command \n");
@@ -419,9 +420,17 @@ void handleCommunicationWithWindow(char * data){
 	}
 
 	if(settingOpenWindow){
+		if(!strcmp(data,"back")){
+			selectDevice();
+			settingOpenWindow = false;
+			basestationBusy = false;
+			communicationWithWindow = false;
+			return;
+		}
 		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
 			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
 			waitingForACK = true;
+			settingOpenWindow = false;
 			ctimer_restart(&ACK_timer);
 		}else{
 			printf("Check the format of inserted data\n");
@@ -502,8 +511,10 @@ void handle_serial_line(char* data){
 			return;
 		}
 
-		if(number_nodes > 0)
+		if(number_nodes > 0){
 			printf("Error: Command not found \n");
+			selectDevice();
+		}
 		else{
 			number_nodes = atoi(data);
 			if(number_nodes == 0 || number_nodes < 0){
@@ -646,18 +657,20 @@ void blinkGreenLedCallback(){
 void ackTimerCallback(){
 	if(communicationWithWindow){
 		communicationWithWindow = false;
-		printf("ERROR: Comunication with window failed \n");
+		window_sync = false;
+		printf("ERROR: Communication with window failed \n");
 	}
 
 	if(communicationWithOven){
 		communicationWithOven = false;
 		oven_sync = false;
-		num_sync_nodes--;
-		num_sync_attempts = 0;
-		ctimer_restart(&broad_timer);
-		printf("ERROR: Comunication with oven failed \n");
+		printf("ERROR: Communication with oven failed \n");
 	}
 
+	selectDevice();
+	num_sync_nodes--;
+	num_sync_attempts = 0;
+	ctimer_restart(&broad_timer);
 	basestationBusy = false;
 	waitingForACK = false;
 }

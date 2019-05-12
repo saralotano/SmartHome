@@ -23,7 +23,7 @@ static struct ctimer ACK_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
 static bool statusWindow = false;
-static bool settingOpenWindow = false, settingTemperature = false, settingHumidity = false;
+static bool settingOpenRollerShutter = false, settingTemperature = false, settingHumidity = false;
 static bool window_sync = false;
 static bool settingParametersOven = false;
 static bool communicationWithOven = false, communicationWithWindow = false;
@@ -211,22 +211,14 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 void checkMsgToWindow(char* data){
 
 	if(!strcmp(data,"open")){
-		LOG_INFO("Open window \n");
-		sendMsg(OPEN_WINDOW,&window_addr,NULL);
-		waitingForACK = true;
-		ctimer_restart(&ACK_timer);
+		
 	}
 	else if(!strcmp(data,"close")){
-		LOG_INFO("Close window\n");
-		sendMsg(CLOSE_WINDOW,&window_addr,NULL);
-		waitingForACK = true;
-		ctimer_restart(&ACK_timer);
+		
 	}
 
 	else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
-		LOG_INFO("Set Timer \n");
-		settingOpenWindow = true;
-		printf("Insert the timer for the roller shutter in format HH:MM\n");
+		
 	}
 }
 
@@ -367,8 +359,6 @@ void handleCommunicationWithOven(char* data){
 			}
 			else{
 				printf("Oven is not busy \n");
-				return;
-				//STAMPA DISPOSITIVI DISPONIBILI
 			}
 			return;
 		}
@@ -391,80 +381,90 @@ void handleCommunicationWithOven(char* data){
 	}
 }
 
+void checkAndSendTemperature(char* data){
+	if(!strcmp(data,"back")){
+		selectDevice();
+		settingTemperature = false;
+		basestationBusy = false;
+		communicationWithWindow = false;
+		return;
+	}
+	int temperature = atoi(data);
+	if(temperature >=15 && temperature <=30){
+		sendMsg(SET_TEMPERATURE,&window_addr,data);
+		waitingForACK = true;
+		settingTemperature = false;
+		ctimer_restart(&ACK_timer);	
+	}else{
+		printf("ERROR: Temperature must be a number between 15 and 30 °C\n");
+	}
+}
+
+void checkAndSendHumidity(char* data){
+	if(!strcmp(data,"back")){
+		selectDevice();
+		settingTemperature = false;
+		basestationBusy = false;
+		communicationWithWindow = false;
+		return;
+	}
+	int humidity = atoi(data);
+	if(humidity <= 60 && humidity >= 15){
+		sendMsg(SET_HUMIDITY,&window_addr,data);
+		waitingForACK = true;
+		settingHumidity = false;
+		ctimer_restart(&ACK_timer);	
+	}else{
+		printf("ERROR: Humidity must be a number between 15 and 60\n");
+	}
+}
+
+void checkAndSendOpenRollerShutter(char* data){
+	if(!strcmp(data,"back")){
+		selectDevice();
+		settingOpenRollerShutter = false;
+		basestationBusy = false;
+		communicationWithWindow = false;
+		return;
+	}
+	char parametersWindow[strlen(data)+1];
+	strcpy(parametersWindow,data);
+	uint8_t hours,minutes;
+	if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
+		sendMsg(SET_TIMER_WINDOW,&window_addr,parametersWindow);
+		waitingForACK = true;
+		if(hours || minutes)
+			statusWindow = true;
+		settingOpenRollerShutter = false;
+		ctimer_restart(&ACK_timer);
+	}else{
+		printf("Check the format of inserted data\n");
+	}	
+}
+
 void handleCommunicationWithWindow(char* data){
 	if(settingTemperature){
-		if(!strcmp(data,"back")){
-			selectDevice();
-			settingTemperature = false;
-			basestationBusy = false;
-			communicationWithWindow = false;
-			return;
-		}
-		int temperature = atoi(data);
-		if(temperature){
-			sendMsg(SET_TEMPERATURE,&window_addr,data);
-			waitingForACK = true;
-			settingTemperature = false;
-			ctimer_restart(&ACK_timer);	
-		}else{
-			printf("ERROR: Temperature must be a number\n");
-		}
+		checkAndSendTemperature(data);
 		return;
 	}
 
 	if(settingHumidity){
-		if(!strcmp(data,"back")){
-			selectDevice();
-			settingTemperature = false;
-			basestationBusy = false;
-			communicationWithWindow = false;
-			return;
-		}
-		int humidity = atoi(data);
-		if(humidity){
-			sendMsg(SET_HUMIDITY,&window_addr,data);
-			waitingForACK = true;
-			settingHumidity = false;
-			ctimer_restart(&ACK_timer);	
-		}else{
-			printf("ERROR: Humidity must be a number\n");
-		}
+		checkAndSendHumidity(data);
 		return;
 	}
 
-	if(settingOpenWindow){
-		if(!strcmp(data,"back")){
-			selectDevice();
-			settingOpenWindow = false;
-			basestationBusy = false;
-			communicationWithWindow = false;
-			return;
-		}
-		char parametersWindow[strlen(data)+1];
-		strcpy(parametersWindow,data);
-		uint8_t hours,minutes;
-		if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
-			sendMsg(SET_TIMER_WINDOW,&window_addr,parametersWindow);
-			waitingForACK = true;
-			if(hours || minutes)
-				statusWindow = true;
-			settingOpenWindow = false;
-			ctimer_restart(&ACK_timer);
-		}else{
-			printf("Check the format of inserted data\n");
-		}	
+	if(settingOpenRollerShutter){
+		checkAndSendOpenRollerShutter(data);
 		return;
 	}
 
 	if(!strcmp(data,"back")){
 		basestationBusy = false;
 		communicationWithOven = false;
-		selectDevice();	
-		return;		
+		selectDevice();		
 	}
 
-	if(!strcmp(data,"cancel")){
-	
+	else if(!strcmp(data,"cancel")){
 		if(windowSet){
 			sendMsg(CANCEL_OPERATION,&window_addr,NULL);
 			waitingForACK = true;
@@ -473,25 +473,38 @@ void handleCommunicationWithWindow(char* data){
 		else{
 			printf("Window has no timers configured\n");
 		}
-		return;
 	}
 
-	if(!strcmp(data,"setTemperature") || !strcmp(data,"settemperature")){
+	else if(!strcmp(data,"setTemperature") || !strcmp(data,"settemperature")){
 		settingTemperature = true;
 		printf("Insert desired temperature expressed in °C \n");
-		return;
 	}
 
-	if(!strcmp(data,"setHumidity") || !strcmp(data,"sethumidity")){
+	else if(!strcmp(data,"setHumidity") || !strcmp(data,"sethumidity")){
 		settingHumidity = true;
 		printf("Insert desired percentage of humidity \n");
-		return;
 	}
 
-	
+	else if(!strcmp(data,"close")){
+		LOG_INFO("Close window\n");
+		sendMsg(CLOSE_WINDOW,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
 
-	if(!strcmp(data,"close") || !strcmp(data,"open") || !strcmp(data,"setTimer") || !strcmp(data,"settimer"))//scrittura BRUTTISSIMA, SISTEMARE
-		checkMsgToWindow(data);
+	else if(!strcmp(data,"open")){
+		LOG_INFO("Open window \n");
+		sendMsg(OPEN_WINDOW,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
+
+	else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
+		LOG_INFO("Set Timer \n");
+		settingOpenRollerShutter = true;
+		printf("Insert timer for the opening of roller shutter in format HH:MM\n");
+	}
+
 	else
 		printf("ERROR: Command not found\n");
 }
@@ -532,16 +545,19 @@ void handle_serial_line(char* data){
 		}
 		else{
 			number_nodes = atoi(data);
-			if(number_nodes == 0 || number_nodes < 0){
+			if(number_nodes <= 0){
 				number_nodes = 0;
 				printf("Error: Number of nodes not correct\n");
+				printf("Insert the number of sensor nodes\n");
 			}
-			else
+			else{
 				LOG_INFO("Number of sensor nodes = %d\n", number_nodes);
+				ctimer_restart(&broad_timer);
+			}
 		}
 	}
 
-	//BASESTATION BUSY
+	//BASESTATION BUSY, the user has inserted the command "deviceName"
 	else{
 		if(communicationWithOven){
 			handleCommunicationWithOven(data);
@@ -556,113 +572,7 @@ void handle_serial_line(char* data){
 
 }
 
-
-/*void handle_serial_line(char* data){
-
-	if(!basestationBusy){
-		//LOG_INFO("Basestation available \n");
-		if(!strcmp(data,"oven") && oven_sync){
-			if(ovenBusy){
-				LOG_INFO("Selected device is busy, please wait until the end of the operation or cancel it \n");
-				return;
-			}
-			LOG_INFO("Selected device: OVEN\n");			
-			ovenBusy = true;
-			basestationBusy = true;
-			return;
-		}
-		if(!strcmp(data,"window") && window_sync){
-			LOG_INFO("Selected device: WINDOW\n");
-			windowBusy = true;
-			basestationBusy = true;
-			return;
-		}
-		if(!strcmp(data,"cancel") && (oven_sync || window_sync)){
-			LOG_INFO("Cancel of last operation \n");
-			if(ovenBusy){
-				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
-				return;
-			}
-			if(windowBusy){
-				sendMsg(CANCEL_OPERATION,&window_addr,NULL);
-				return;
-			}
-			return;
-		}
-
-		if(!strcmp(data,"status")){
-			if(oven_sync){
-				if(ovenBusy){
-					printf("Oven is busy\n");
-				}else{
-					printf("Oven is ready to be used\n");
-				}
-			}else{
-				printf("Oven is not connected\n");
-			}
-
-			if(window_sync){
-				if(windowBusy){
-					printf("Window is busy\n");
-				}else{
-					printf("Window is ready to be used\n");
-				}
-			}else{
-				printf("Window is not connected\n");
-			}
-			return;
-		}
-		if(number_nodes > 0)
-			printf("Error: Command not found \n");
-		else{
-			number_nodes = atoi(data);
-			if(number_nodes == 0 || number_nodes < 0){
-				number_nodes = 0;
-				printf("Error: Number of nodes not correct\n");
-			}
-			else
-				LOG_INFO("Number of sensor nodes = %d\n", number_nodes);
-		}
-
-	}else{
-
-		if(ovenBusy){	//receiving commands for the oven
-			//LOG_INFO("dentro ovenBusy \n");
-			if(!strcmp(data,"cancel")){
-				LOG_INFO("Cancel of communication \n");
-				ovenBusy = false;
-				basestationBusy = false;
-			}else{
-				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
-					sendMsg(START_OPERATION,&oven_addr,data);
-				}else{
-					printf("Check the format of inserted data\n");
-				}
-			}
-
-		}else{//receiving command for the window	
-
-			if(!strcmp(data,"cancel")){
-				LOG_INFO("Cancel of communication \n");
-				windowBusy = false;
-				basestationBusy = false;
-			}else{
-				if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
-					sendMsg(START_OPERATION,&window_addr,data);
-				}else{
-					printf("Check the format of inserted data\n");
-				}
-
-				checkMsgToWindow(data);
-			}
-		}
-
-	}
-
-}*/
-
 void blinkGreenLedCallback(){
-	//LOG_INFO("dentro blinkGreenLedCallback \n");
 	leds_toggle(LEDS_GREEN);
 	ctimer_restart(&green_led);
 }
@@ -730,6 +640,7 @@ PROCESS_THREAD(basestation_proc, ev, data){
 
 	PROCESS_BEGIN();
 
+	//LAUNCHPAD
 	//cc26xx_uart_set_input(serial_line_input_byte);
 	//serial_line_init();
 	leds_on(LEDS_RED);
@@ -739,18 +650,14 @@ PROCESS_THREAD(basestation_proc, ev, data){
 
 	ctimer_set(&ACK_timer,5 * CLOCK_SECOND, ackTimerCallback, NULL);
 	ctimer_stop(&ACK_timer);
+	ctimer_set(&broad_timer,CLOCK_SECOND,discoverNodes,NULL);
+	ctimer_stop(&broad_timer);
 
 	while(1){
-		PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);
-		//printf("received: %s\n",(char*)data);
-		handle_serial_line((char*)data);
 
-		if(number_nodes > 0 && num_sync_nodes != number_nodes){
-			ctimer_set(&broad_timer,CLOCK_SECOND,discoverNodes,NULL);
-		}
-		else if(num_sync_nodes != number_nodes){
-			printf("Insert the number of sensor nodes\n");
-		}
+		PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);
+		handle_serial_line((char*)data);
+		
 	}
 
 	PROCESS_END();

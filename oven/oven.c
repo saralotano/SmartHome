@@ -2,8 +2,8 @@
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
-//#include "os/dev/button-hal.h"
+//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
+//#include "os/dev/button-hal.h" //LAUNCHPAD
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include "sys/clock.h"
 #include "sys/ctimer.h"
 #include "sys/etimer.h"
-//#include "batmon-sensor.h" // non c'è il batmon sensor su cooja
+//#include "batmon-sensor.h" //LAUNCHPAD
 #include "random.h"
 #include "parameters.h"
 
@@ -21,7 +21,7 @@
 
 static linkaddr_t basestation_addr;
 static struct ctimer green_led;
-static struct ctimer cooking_timer;
+//static struct ctimer cooking_timer; //LAUNCHPAD
 static struct ctimer red_led;
 static struct ctimer b_leds;
 static bool firstTimeBlinkRed = true;
@@ -31,7 +31,7 @@ static int current_temp = 0;
 static int oven_degree = 0;
 static int oven_time = 0;
 static int phase = INITIAL_PHASE;
-int counter = 0; // andrà tolto quando non simuleremo più su cooja
+int counter = 0; //COOJA
 
 
 PROCESS(oven_proc, "oven_proc");
@@ -68,7 +68,7 @@ static void getCurrentTemperature(void){
 
 //si occupa di far lampeggiare il led rosso quando la cottura è terminata
 void blinkRedLedCallback(){
-	counter++;	//andrà tolto quando non useremo più cooja
+	counter++;	//COOJA
 	leds_toggle(LEDS_RED);
 	printf("Remove the preparation, please\n");	
 
@@ -79,14 +79,14 @@ void blinkRedLedCallback(){
 	else
 		ctimer_restart(&red_led);
 
-	if(counter == 2){	//tutto questo if sostituisce l'utilizzo del bottone, dopo andrà tolto
+	if(counter == 2){	//COOJA
 		ctimer_stop(&red_led);
 		phase = INITIAL_PHASE;
 		firstTimeBlinkRed = true;
 		leds_off(LEDS_RED);
 		printf("Preparation ended \n");
 		counter = 0;
-		sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
+		sendMsg(OPERATION_COMPLETED,&basestation_addr,"preparation");
 	}
 
 	return;
@@ -99,7 +99,7 @@ void endPreparationCallback(){
 	buttonAvailable = true;
 	leds_off(LEDS_GREEN);
 	leds_on(LEDS_RED);
-	ctimer_stop(&cooking_timer); //Non necessario, perchè non viene fatta la restart su questo timer e si stoppa in automatico
+	//ctimer_stop(&cooking_timer); //Non necessario, perchè non viene fatta la restart su questo timer e si stoppa in automatico
 	ctimer_set(&red_led, 3*CLOCK_SECOND, blinkRedLedCallback, NULL);
 	return;
 }
@@ -115,8 +115,8 @@ void heatingPhase(){
 		printf("Insert the preparation and push the left button \n");
 		buttonAvailable = true;
 		phase = COOKING_PHASE;
-		printf("Cooking for %d minutes . . . \n", oven_time);	//andrà tolta quando non useremo più cooja
-		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//andrà tolta quando non useremo più cooja
+		printf("Cooking for %d minutes . . . \n", oven_time);	//COOJA
+		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//aCOOJA
 		//cooking time is simulated in seconds and not in minutes
 		return;
 	}
@@ -129,12 +129,13 @@ void heatingPhase(){
 
 void start_preparation (){
 	LOG_INFO("\nCooking parameters: %d degrees for %d minutes\n", oven_degree, oven_time);
-
+	//LAUNCHPAD
 	/* non c'è il batmon sensor su cooja
 	SENSORS_ACTIVATE(batmon_sensor);
 	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//set the current temperature of the oven
 	SENSORS_DEACTIVATE(batmon_sensor);
 	*/
+	//COOJA
 	current_temp = 30; // va modificato e preso dal sensore
 	LOG_INFO("Current sensor temperature : %d degrees\n", current_temp);
 	phase = PREHEATING_PHASE;
@@ -186,7 +187,7 @@ void handleCancelOperation(){
 			sendMsg(CANCEL_OK,&basestation_addr,NULL);
 			break;
 		case PREPARATION_COMPLETED:
-			LOG_INFO("Prepartion completed, operation cannot be stopped\n");
+			LOG_INFO("Preparation completed, operation cannot be stopped\n");
 			sendMsg(CANCEL_ERR,&basestation_addr,NULL);
 			break;
 		default:
@@ -211,9 +212,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
 		uint8_t op = *(uint8_t *)data;
 		char* content = ((char*)data)+1;
-		char received_data[strlen((char *)content) + 1];
+		/*char received_data[strlen((char *)content) + 1];
 		if(len == strlen((char *)data) + 1) 
-			memcpy(&received_data, content, strlen((char *)content) + 1);
+			memcpy(&received_data, content, strlen((char *)content) + 1);*/
 		
 		//splitting of the received string temperature,cooking_time
 		switch(op){
@@ -238,6 +239,7 @@ PROCESS_THREAD(oven_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
+	//LAUNCHPAD
 	/* //questa parte si occupa della gestione degli eventi legati ai buttons
 
 	while(1){

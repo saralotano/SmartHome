@@ -11,8 +11,11 @@
 #define CANCEL_ERR 9
 #define OPEN_WINDOW 10
 #define CLOSE_WINDOW 11
-#define SET_TIMER_WINDOW 12
-#define SET_TEMPERATURE 13
-#define SET_HUMIDITY 14
+#define SET_TIMER_OPEN 12
+#define SET_TIMER_CLOSE 13
+#define SET_TEMPERATURE 14
+#define SET_HUMIDITY 15
+#define OPEN_SHUTTER 16
+#define CLOSE_SHUTTER 17
 #define DEFAULT_TEMPERATURE 18	 //expressed in Celsius degrees
 #define DEFAULT_HUMIDITY 35	 	 //expressed in percentage

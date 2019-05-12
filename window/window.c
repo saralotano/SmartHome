@@ -21,7 +21,8 @@
 
 static linkaddr_t basestation_addr;
 
-static struct ctimer alarm;
+static struct ctimer open_alarm;
+static struct ctimer close_alarm;
 static struct ctimer checkInfoEnvironment;
 static struct ctimer noCheckInfoEnvironment;
 
@@ -36,9 +37,17 @@ static bool windowOpened = false;
 PROCESS(window_proc, "window_proc");
 AUTOSTART_PROCESSES(&window_proc);
 
+char* getMsg(const void *data, uint16_t len){
+	if(len != strlen((char *)data) + 1){
+		LOG_INFO("Message lenght error \n");
+	}	
+	char* content = ((char*)data)+1;
+	return content;
+}
+
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 
-	uint8_t size;
+	int size;
 	if(content == NULL)
 		size = 0;
 	else
@@ -48,7 +57,7 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	nullnet_len = size + 1;
 
 	if(size != 0)
-		memcpy(&msg[1],content,nullnet_len-1);
+		memcpy(&msg[1],content,size);
 
 	nullnet_buf = (uint8_t *)msg;
 	NETSTACK_NETWORK.output(dest);
@@ -128,11 +137,27 @@ void environmentCallback(){
 	}
 }
 
-
-
-void alarmCallback(){	//mandare una specie di operation Completed
+void manualOpenShutter(){
 	LOG_INFO("Lift roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualOpenShutter");
+	return;
+}
+
+void manualCloseShutter(){
+	LOG_INFO("Lower roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualCloseShutter");
+	return;
+}
+
+void openAlarmCallback(){	
+	LOG_INFO("Lift roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"openShutter");
+	return;
+}
+
+void closeAlarmCallback(){
+	LOG_INFO("Lower roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"closeShutter");
 	return;
 }
 
@@ -161,9 +186,8 @@ void handleSetHumidity(char* content){
 	sendMsg(OPERATION_OK, &basestation_addr, NULL);
 }
 
-void handleSetTimer(char* content){
-	printf("stampo content in handleSetTimer %s\n", content);
-	LOG_INFO("handleSetTimer \n");
+void handleSetTimerOpen(char* content){
+	LOG_INFO("handleSetTimerOpen \n");
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
@@ -177,19 +201,43 @@ void handleSetTimer(char* content){
 
 	//int seconds = minutes*60 + hours*3600;
 
-	sendMsg(OPERATION_OK,&basestation_addr,NULL);		
-	ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);
+	sendMsg(OPERATION_OK,&basestation_addr,"setOpenShutter");		
+	ctimer_set(&open_alarm, minutes * CLOCK_SECOND, openAlarmCallback, NULL);
 		//modificare minutes con seconds
 }
 
-void handleCancelOperation(){
-	LOG_INFO("Alarm reset\n");
-	//userTemperature = DEFAULT_TEMPERATURE;
-	//userHumidity = DEFAULT_HUMIDITY;
-	ctimer_stop(&alarm);
-	sendMsg(CANCEL_OK,&basestation_addr,NULL);
+void handleSetTimerClose(char* content){
+	LOG_INFO("handleSetTimerClose \n");
+	char delim[] = ":";
+	char* ptr = strtok(content,delim);
+	uint8_t hours = atoi(ptr);
+	//bool error = false;
+		
+	ptr = strtok(NULL,delim);
+	uint8_t minutes = atoi(ptr);
+	
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
+
+	//int seconds = minutes*60 + hours*3600;
+
+	sendMsg(OPERATION_OK,&basestation_addr,"setCloseShutter");		
+	ctimer_set(&close_alarm, minutes * CLOCK_SECOND, closeAlarmCallback, NULL);
+		//modificare minutes con seconds
 }
 
+void handleCancelOperation(char* content){
+	if(!strcmp(content,"openTimer")){
+		LOG_INFO("Open Alarm reset\n");
+		ctimer_stop(&open_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"openAlarm");
+	}
+	else if(!strcmp(content,"closeTimer")){
+		LOG_INFO("Close Alarm reset\n");
+		ctimer_stop(&close_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"closeAlarm");
+	}
+}
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	
@@ -219,8 +267,20 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 				handleCloseWindow();
 				break;
 
-			case SET_TIMER_WINDOW:
-				handleSetTimer(content);
+			case OPEN_SHUTTER:
+				manualOpenShutter();
+				break;
+
+			case CLOSE_SHUTTER:
+				manualCloseShutter();
+				break;
+
+			case SET_TIMER_OPEN:
+				handleSetTimerOpen(content);
+				break;
+
+			case SET_TIMER_CLOSE:
+				handleSetTimerClose(content);
 				break;
 
 			case SET_TEMPERATURE:
@@ -232,7 +292,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 				break;
 
 			case CANCEL_OPERATION:
-				handleCancelOperation();
+				handleCancelOperation(getMsg(data,len));
 				break;
 			
 			default:

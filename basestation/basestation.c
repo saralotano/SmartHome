@@ -22,13 +22,14 @@ static struct ctimer reactive_broad_timer;
 static struct ctimer ACK_timer;
 static struct ctimer green_led;
 static bool oven_sync = false;
-static bool statusWindow = false;
+static bool openStatusWindow = false, closeStatusWindow = false;
 static bool settingOpenRollerShutter = false, settingTemperature = false, settingHumidity = false;
+static bool settingCloseRollerShutter = false;
 static bool window_sync = false;
 static bool settingParametersOven = false;
 static bool communicationWithOven = false, communicationWithWindow = false;
 static bool waitingForACK = false;
-static bool windowSet = false; //to know if there are parameters set on the window
+static bool openWindowSet = false, closeWindowSet = false; //to know if there are parameters set on the window
 static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
 static int num_sync_nodes = 0;	
@@ -89,9 +90,12 @@ void handleOperationOK(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
-		if(statusWindow){
-			windowSet = true;
-			statusWindow = false;
+		if(openStatusWindow){
+			openWindowSet = true;
+			openStatusWindow = false;
+		}else if(closeStatusWindow){
+			closeWindowSet = true;
+			closeStatusWindow = false;
 		}
 	}
 
@@ -103,7 +107,7 @@ void handleOperationOK(const linkaddr_t* src){
 }
 
 
-void handleOperationCompleted(const linkaddr_t* src){
+void handleOperationCompleted(const linkaddr_t* src, char* content){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
 		ovenBusy = false;
@@ -111,30 +115,52 @@ void handleOperationCompleted(const linkaddr_t* src){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowBusy = false;
-		windowSet = false;
-		printf("The roller shutter is lifted up\n");
+		if(!strcmp(content,"openShutter")){
+			openWindowSet = false;
+			printf("The roller shutter is lifted up\n");
+		}else if(!strcmp(content,"closeShutter")){
+			closeWindowSet = false;
+			printf("The roller shutter is lowered\n");
+		}else if(!strcmp(content,"manualOpenShutter")){
+			printf("The roller shutter is lifted up\n");
+			ctimer_stop(&ACK_timer);
+			waitingForACK = false;
+			basestationBusy = false;
+			selectDevice();
+		}
+		else if(!strcmp(content,"manualCloseShutter")){
+			printf("The roller shutter is lowered\n");
+			ctimer_stop(&ACK_timer);
+			waitingForACK = false;
+			basestationBusy = false;
+			selectDevice();
+		}
 	}
-
-	return;
 }
 
-void handleCancelOK(const linkaddr_t* src){
+void handleCancelOK(const linkaddr_t* src, char* content){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
 		ovenBusy = false;
 		printf("The oven is no longer used\n");
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
-		windowSet = false;
-		printf("The window is no longer used\n");
+		if(!strcmp(content,"openAlarm")){
+			openWindowSet = false;
+			printf("The opening for roller shutter has been canceled\n");
+		}
+		else if(!strcmp(content,"closeAlarm")){
+			closeWindowSet = false;
+			printf("The closing for roller shutter has been canceled\n");
+		}
+		if(!closeWindowSet && !openWindowSet)
+		printf("The window has now no timer assigned\n");
 	}
 
 	waitingForACK = false;
 	basestationBusy = false;
 	ctimer_stop(&ACK_timer);
 	selectDevice();
-
-	return;
 }
 
 void handleCancelErr(){
@@ -150,7 +176,7 @@ void handleCancelErr(){
 
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
-		LOG_INFO("Message lenght error \n");
+		LOG_INFO("Message length error \n");
 	}	
 	char* content = ((char*)data)+1;
 	return content;
@@ -172,10 +198,10 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 
 		case OPERATION_COMPLETED:
-			handleOperationCompleted(src);	
+			handleOperationCompleted(src, getMsg(data,len));	
 			break;
 		case CANCEL_OK:
-			handleCancelOK(src);
+			handleCancelOK(src, getMsg(data,len));
 			break;
 		case CANCEL_ERR:
 			handleCancelErr();
@@ -206,20 +232,6 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	NETSTACK_NETWORK.output(dest);
 
 	return;
-}
-
-void checkMsgToWindow(char* data){
-
-	if(!strcmp(data,"open")){
-		
-	}
-	else if(!strcmp(data,"close")){
-		
-	}
-
-	else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
-		
-	}
 }
 
 bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes){
@@ -323,27 +335,29 @@ bool checkParametersOven(char* content){
 	return true;
 }
 
+void checkAndSendParametersOven(char* data){
+	if(!strcmp(data,"back")){
+		selectDevice();
+		settingParametersOven = false;
+		basestationBusy = false;
+		communicationWithOven = false;
+		return;
+	}
+
+	char parametersOven[strlen(data)+1];
+	strcpy(parametersOven,data);
+	if(checkParametersOven(data)){
+		sendMsg(START_OPERATION,&oven_addr,parametersOven);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);			
+		settingParametersOven = false; 
+	}
+}
+
 void handleCommunicationWithOven(char* data){
 
 	if(settingParametersOven){
-		if(!strcmp(data,"back")){
-			selectDevice();
-			settingParametersOven = false;
-			basestationBusy = false;
-			communicationWithOven = false;
-			return;
-		}
-
-		char parametersOven[strlen(data)+1];
-		strcpy(parametersOven,data);
-		if(checkParametersOven(data)){
-			sendMsg(START_OPERATION,&oven_addr,parametersOven);
-			waitingForACK = true;
-			ctimer_restart(&ACK_timer);			
-			settingParametersOven = false; 
-		}
-		
-		return;
+		checkAndSendParametersOven(data);
 	}
 
 	else{
@@ -354,30 +368,30 @@ void handleCommunicationWithOven(char* data){
 
 				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
 				waitingForACK = true;
-				ctimer_restart(&ACK_timer);			
+				ctimer_restart(&ACK_timer);	
+				communicationWithOven = false;
+				selectDevice();		
 
 			}
 			else{
 				printf("Oven is not busy \n");
 			}
-			return;
 		}
 
-		if(!strcmp(data,"back")){
+		else if(!strcmp(data,"back")){
 			basestationBusy = false;
 			communicationWithOven = false;
-			selectDevice();	
-			return;		
+			selectDevice();		
 		}
 	
-		if(!strcmp(data,"setParameters") || !strcmp(data,"setparameters")){
+		else if(!strcmp(data,"setParameters") || !strcmp(data,"setparameters")){
 			settingParametersOven = true;
 			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
-			printf("Example: 180,30\n");
-			return;			
-				
+			printf("Example: 180,30\n");			
 		}
-		printf("ERROR: Command not found\n");
+
+		else
+			printf("ERROR: Command not found\n");
 	}
 }
 
@@ -431,47 +445,82 @@ void checkAndSendOpenRollerShutter(char* data){
 	strcpy(parametersWindow,data);
 	uint8_t hours,minutes;
 	if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
-		sendMsg(SET_TIMER_WINDOW,&window_addr,parametersWindow);
+		sendMsg(SET_TIMER_OPEN,&window_addr,parametersWindow);
 		waitingForACK = true;
 		if(hours || minutes)
-			statusWindow = true;
+			openStatusWindow = true;
 		settingOpenRollerShutter = false;
 		ctimer_restart(&ACK_timer);
 	}else{
-		printf("Check the format of inserted data\n");
+		printf("ERROR: Check the format of inserted data\n");
+	}	
+}
+
+void checkAndSendCloseRollerShutter(char* data){
+	if(!strcmp(data,"back")){
+		selectDevice();
+		settingCloseRollerShutter = false;
+		basestationBusy = false;
+		communicationWithWindow = false;
+		return;
+	}
+	char parametersWindow[strlen(data)+1];
+	strcpy(parametersWindow,data);
+	uint8_t hours,minutes;
+	if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
+		sendMsg(SET_TIMER_CLOSE,&window_addr,parametersWindow);
+		waitingForACK = true;
+		if(hours || minutes)
+			closeStatusWindow = true;
+		settingCloseRollerShutter = false;
+		ctimer_restart(&ACK_timer);
+	}else{
+		printf("ERROR: Check the format of inserted data\n");
 	}	
 }
 
 void handleCommunicationWithWindow(char* data){
 	if(settingTemperature){
 		checkAndSendTemperature(data);
-		return;
 	}
 
-	if(settingHumidity){
+	else if(settingHumidity){
 		checkAndSendHumidity(data);
-		return;
 	}
 
-	if(settingOpenRollerShutter){
+	else if(settingOpenRollerShutter){
 		checkAndSendOpenRollerShutter(data);
-		return;
 	}
 
-	if(!strcmp(data,"back")){
+	else if(settingCloseRollerShutter){
+		checkAndSendCloseRollerShutter(data);
+	}
+
+	else if(!strcmp(data,"back")){
 		basestationBusy = false;
 		communicationWithOven = false;
 		selectDevice();		
 	}
 
-	else if(!strcmp(data,"cancel")){
-		if(windowSet){
-			sendMsg(CANCEL_OPERATION,&window_addr,NULL);
+	else if(!strcmp(data,"cancelOpenTimer") || !strcmp(data,"cancelopentimer")){
+		if(openWindowSet){
+			sendMsg(CANCEL_OPERATION,&window_addr,"openTimer");
 			waitingForACK = true;
 			ctimer_restart(&ACK_timer);
 		}
 		else{
-			printf("Window has no timers configured\n");
+			printf("Window has no timer for roller shutter opening configured\n");
+		}
+	}
+
+	else if(!strcmp(data,"cancelCloseTimer") || !strcmp(data,"cancelclosetimer")){
+		if(closeWindowSet){
+			sendMsg(CANCEL_OPERATION,&window_addr,"closeTimer");
+			waitingForACK = true;
+			ctimer_restart(&ACK_timer);
+		}
+		else{
+			printf("Window has no timer for roller shutter closing configured\n");
 		}
 	}
 
@@ -485,31 +534,51 @@ void handleCommunicationWithWindow(char* data){
 		printf("Insert desired percentage of humidity \n");
 	}
 
-	else if(!strcmp(data,"close")){
+	else if(!strcmp(data,"closeWindow") || !strcmp(data,"closewindow")){
 		LOG_INFO("Close window\n");
 		sendMsg(CLOSE_WINDOW,&window_addr,NULL);
 		waitingForACK = true;
 		ctimer_restart(&ACK_timer);
 	}
 
-	else if(!strcmp(data,"open")){
+	else if(!strcmp(data,"openWindow") || !strcmp(data,"openwindow")){
 		LOG_INFO("Open window \n");
 		sendMsg(OPEN_WINDOW,&window_addr,NULL);
 		waitingForACK = true;
 		ctimer_restart(&ACK_timer);
 	}
 
-	else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
-		LOG_INFO("Set Timer \n");
+	else if(!strcmp(data,"openRollerShutter") || !strcmp(data,"openrollershutter")){
+		LOG_INFO("Open roller shutter\n");
+		sendMsg(OPEN_SHUTTER,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
+
+	else if(!strcmp(data,"closeRollerShutter") || !strcmp(data,"closerollershutter")){
+		LOG_INFO("Close roller shutter\n");
+		sendMsg(CLOSE_SHUTTER,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
+
+	else if(!strcmp(data,"setOpenRollerShutter") || !strcmp(data,"setopenrollershutter")){
+		LOG_INFO("Set open roller shutter \n");
 		settingOpenRollerShutter = true;
 		printf("Insert timer for the opening of roller shutter in format HH:MM\n");
+	}
+
+	else if(!strcmp(data,"setCloseRollerShutter") || !strcmp(data,"setcloserollershutter")){
+		LOG_INFO("Set close roller shutter\n");
+		settingCloseRollerShutter = true;
+		printf("Insert timer for the closing of roller shutter in format HH:MM\n");
 	}
 
 	else
 		printf("ERROR: Command not found\n");
 }
 
-void selectDevice(){	//cambiarla per renderla più generica
+void selectDevice(){
 	printf("Select a device to comunicate with \n");
 	if(oven_sync)
 		printf(" - oven\n");
@@ -532,8 +601,9 @@ void handle_serial_line(char* data){
 			return;
 		}
 		if(!strcmp(data,"window") && window_sync){
-			printf("Available commands:\n -back \n -cancel(only if window has been set) \n -open \n");
-			printf(" -close \n -setTimer \n -setTemperature \n -setHumidity \n");
+			printf("Available commands:\n -back \n -cancelOpenTimer \n -cancelCloseTimer \n -openWindow \n");
+			printf(" -closeWindow \n -setOpenRollerShutter \n -setCloseRollerShutter \n");
+			printf(" -openRollerShutter \n -closeRollerShutter \n -setTemperature \n -setHumidity \n");
 			communicationWithWindow = true;
 			basestationBusy = true;
 			return;
@@ -582,7 +652,8 @@ void blinkGreenLedCallback(){
 void ackTimerCallback(){
 	if(communicationWithWindow){
 		communicationWithWindow = false;
-		statusWindow = false;
+		openStatusWindow = false;
+		closeStatusWindow = false;
 		window_sync = false;
 		printf("ERROR: Communication with window failed \n");
 	}

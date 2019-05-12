@@ -2,8 +2,8 @@
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
-//#include "os/dev/button-hal.h"
+//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
+//#include "os/dev/button-hal.h" //LAUNCHPAD
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include "sys/clock.h"
 #include "sys/ctimer.h"
 #include "sys/etimer.h"
-//#include "batmon-sensor.h" // non c'è il batmon sensor su cooja
+//#include "batmon-sensor.h" //LAUNCHPAD
 #include "random.h"
 #include "parameters.h"
 
@@ -27,9 +27,10 @@ static struct ctimer noCheckInfoEnvironment;
 
 static int userTemperature = DEFAULT_TEMPERATURE;
 static int userHumidity = DEFAULT_HUMIDITY;
+static int currentTemp = 0;
 
-bool alreadySynchronized = false;
-bool windowOpened = false;
+static bool alreadySynchronized = false;
+static bool windowOpened = false;
 
 
 PROCESS(window_proc, "window_proc");
@@ -95,29 +96,34 @@ void closeWindow(){
 
 
 void environmentCallback(){
-
+	//LAUNCHPAD
 	/*SENSORS_ACTIVATE(batmon_sensor);
-	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//set the current temperature of the oven
+	currentTemp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//set the current temperature of the oven
 	SENSORS_DEACTIVATE(batmon_sensor);*/
 
-	uint8_t currentTemp = random_rand()%30;
-	LOG_INFO("Dentro environmentCallback, currentTemp: %d\n",currentTemp);
+	//COOJA
+	currentTemp = DEFAULT_TEMPERATURE;
+	
 	bool changeStatus = false;
 
 	if(windowOpened){
+		currentTemp -= random_rand()%10;
+		LOG_INFO("Window opened, current temperature: %d\n",currentTemp);
 		if(currentTemp < userTemperature){
 			changeStatus = true;
 			closeWindow();
 		}
 	}
-	else
+	else{
+		currentTemp += random_rand()%10;
+		LOG_INFO("Window closed, current temperature: %d\n",currentTemp);
 		if(currentTemp > userTemperature){
 			changeStatus = true;
 			openWindow();
 		}
+	}
 
 	if(!changeStatus){
-		//ctimer_stop(&checkInfoEnvironment);
 		ctimer_restart(&checkInfoEnvironment);
 	}
 }
@@ -126,17 +132,18 @@ void environmentCallback(){
 
 void alarmCallback(){	//mandare una specie di operation Completed
 	LOG_INFO("Lift roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
 	return;
 }
 
-void handleOpenWindow(){	//mandare un ACK alla base station
+void handleOpenWindow(){	
 	openWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 
 
-void handleCloseWindow(){	//mandare un ACK alla base station
+void handleCloseWindow(){	
 	closeWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
@@ -176,7 +183,7 @@ void handleSetTimer(char* content){
 }
 
 void handleCancelOperation(){
-	LOG_INFO("Parameters reset\n");
+	LOG_INFO("Alarm reset\n");
 	//userTemperature = DEFAULT_TEMPERATURE;
 	//userHumidity = DEFAULT_HUMIDITY;
 	ctimer_stop(&alarm);
@@ -242,7 +249,6 @@ PROCESS_THREAD(window_proc, ev, data){
 
 	PROCESS_BEGIN();
 
-	LOG_INFO("prima di nullnet\n");
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
@@ -250,6 +256,20 @@ PROCESS_THREAD(window_proc, ev, data){
 	ctimer_set(&checkInfoEnvironment,5*CLOCK_SECOND,environmentCallback,NULL);
 	ctimer_set(&noCheckInfoEnvironment,20*CLOCK_SECOND,noEnvironmentCallback,NULL);
 	ctimer_stop(&noCheckInfoEnvironment);
+
+	//LAUNCHPAD
+	/*while(1){
+		PROCESS_YIELD();
+		button_hal_button_t *btn = (button_hal_button_t *)data;
+		if(ev == button_hal_press_event){
+			if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_LEFT){	//la preparazione è stata inserita nel forno
+				openWindow();
+			} 
+			else if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_RIGHT) { //la preparazione è stata rimossa dal forno
+				closeWindow();
+			}
+		}
+	}*/
 
 
 

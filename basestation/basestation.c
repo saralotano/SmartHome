@@ -10,7 +10,7 @@
 #include "sys/ctimer.h"
 #include "os/dev/serial-line.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
+//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
@@ -45,22 +45,25 @@ AUTOSTART_PROCESSES(&basestation_proc);
 
 static void synchNode(char* received_data,const linkaddr_t *src){
 
-		if(strcmp(received_data, "oven") == 0 && !oven_sync){
-			oven_addr = *src;
-			LOG_INFO("Oven address : ");
-			LOG_INFO_LLADDR(src);
-			LOG_INFO_("\n");
-			oven_sync = true;
-			num_sync_nodes++;
-		}
-		else if(strcmp(received_data, "window") == 0 && !window_sync){
-			window_addr = *src;
-			LOG_INFO("Window address : ");
-			LOG_INFO_LLADDR(src);
-			LOG_INFO_("\n");
-			window_sync = true;
-			num_sync_nodes++;
-		}
+	if(num_sync_nodes >= number_nodes)
+		return;
+
+	if(strcmp(received_data, "oven") == 0 && !oven_sync){
+		oven_addr = *src;
+		LOG_INFO("Oven address : ");
+		LOG_INFO_LLADDR(src);
+		LOG_INFO_("\n");
+		oven_sync = true;
+		num_sync_nodes++;
+	}
+	else if(strcmp(received_data, "window") == 0 && !window_sync){
+		window_addr = *src;
+		LOG_INFO("Window address : ");
+		LOG_INFO_LLADDR(src);
+		LOG_INFO_("\n");
+		window_sync = true;
+		num_sync_nodes++;
+	}
 
 	LOG_INFO("Number of synchronized nodes: %d \n", num_sync_nodes);
 
@@ -86,36 +89,18 @@ void handleOperationOK(const linkaddr_t* src){
 
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
-		if(statusWindow)
+		if(statusWindow){
 			windowSet = true;
-		//N.B. cosi non viene gestito il caso in cui voglio annullare l'apertura/chiusura finestra
+			statusWindow = false;
+		}
 	}
 
-	//LOG_INFO("Operazione andata a buon fine \n");
 	ctimer_stop(&ACK_timer);
 	waitingForACK = false;
 	basestationBusy = false;
 	selectDevice();
 	return;
 }
-
-/*void handleOperationError(const linkaddr_t* src){
-	if(linkaddr_cmp(src,&oven_addr)){
-		ovenBusy = false;
-		LOG_INFO("The oven did not correctly received all the parameters. \n");
-	}
-
-	if(linkaddr_cmp(src,&window_addr)){
-		windowBusy = false;
-		settingOpenWindow = false;
-		LOG_INFO("The window did not correctly received all the parameters. \n");
-	}
-
-	//LOG_INFO("Operazione non andata a buon fine\n");
-	basestationBusy = false;
-	return;
-}
-*/
 
 
 void handleOperationCompleted(const linkaddr_t* src){
@@ -126,10 +111,9 @@ void handleOperationCompleted(const linkaddr_t* src){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowBusy = false;
-		statusWindow = false;
-		printf("The window is ready to be used\n");
+		windowSet = false;
+		printf("The roller shutter is lifted up\n");
 	}
-	//PER LA FINESTRA OPERATION OK EQUIVALE A OPERATION COMPLETED
 
 	return;
 }
@@ -142,7 +126,6 @@ void handleCancelOK(const linkaddr_t* src){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowSet = false;
-		statusWindow = false;
 		printf("The window is no longer used\n");
 	}
 
@@ -188,10 +171,6 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			handleOperationOK(src);
 			break;
 
-		/*case OPERATION_ERROR:
-			handleOperationError(src);
-			break;*/
-
 		case OPERATION_COMPLETED:
 			handleOperationCompleted(src);	
 			break;
@@ -231,52 +210,27 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 
 void checkMsgToWindow(char* data){
 
-	LOG_INFO("Dentro checkMsgToWindow \n");
-	//bool operationEnded = false;
+	if(!strcmp(data,"open")){
+		LOG_INFO("Open window \n");
+		sendMsg(OPEN_WINDOW,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
+	else if(!strcmp(data,"close")){
+		LOG_INFO("Close window\n");
+		sendMsg(CLOSE_WINDOW,&window_addr,NULL);
+		waitingForACK = true;
+		ctimer_restart(&ACK_timer);
+	}
 
-	/*if(settingOpenWindow){
-		if(atoi(data)){//to avoid crash of the program, if the user types a string not convertible to number
-			sendMsg(SET_TIMER_WINDOW,&window_addr,data);
-			waitingForACK = true;
-			ctimer_restart(&ACK_timer);
-		}else{
-			printf("Check the format of inserted data\n");
-		}	
-	}*/
-
-	//else{
-		if(!strcmp(data,"open")){
-			LOG_INFO("Open window \n");
-			sendMsg(OPEN_WINDOW,&window_addr,NULL);
-			waitingForACK = true;
-			ctimer_restart(&ACK_timer);
-			//operationEnded = true;
-		}
-		else if(!strcmp(data,"close")){
-			LOG_INFO("Close window\n");
-			//operationEnded = true;
-			sendMsg(CLOSE_WINDOW,&window_addr,NULL);
-			waitingForACK = true;
-			ctimer_restart(&ACK_timer);
-		}
-	
-		else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
-			LOG_INFO("Set Timer \n");
-			settingOpenWindow = true;
-			printf("Insert the timer for the roller shutter in format HH:MM\n");
-		}/*
-		else
-			LOG_INFO("Unrecognized command \n");
-	
-		if(operationEnded){
-			windowBusy = false;
-			basestationBusy = false;
-		}*/
-	//}
+	else if(!strcmp(data,"setTimer") || !strcmp(data,"settimer")){
+		LOG_INFO("Set Timer \n");
+		settingOpenWindow = true;
+		printf("Insert the timer for the roller shutter in format HH:MM\n");
+	}
 }
 
 bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes){
-	//LOG_INFO("handleSetTimer \n");
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	if(ptr == NULL){
@@ -322,24 +276,10 @@ bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes)
 		printf("Format error: too many parameters \n");
 		return false;
 	}
-
-	/*if(error){
-		sendMsg(OPERATION_ERROR,&basestation_addr,NULL);
-		return;
-	}
-
-	if(!hours && !minutes){	
-		handleOpenWindow();
-		return;
-	}*/
 	
 	LOG_INFO("hours: %d\n",hours);
 	LOG_INFO("minutes: %d\n",minutes);
-	//sendMsg(OPERATION_OK,&basestation_addr,NULL);	
 
-	//int seconds = minutes*60 + hours*3600;
-
-	//ctimer_set(&alarm, minutes * CLOCK_SECOND, alarmCallback, NULL);	//modificare minutes con seconds
 	*retHours = hours;
 	*retMinutes = minutes;
 	return true;
@@ -504,7 +444,6 @@ void handleCommunicationWithWindow(char* data){
 		strcpy(parametersWindow,data);
 		uint8_t hours,minutes;
 		if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
-			LOG_INFO("superato il checkParametersWindow \n");
 			sendMsg(SET_TIMER_WINDOW,&window_addr,parametersWindow);
 			waitingForACK = true;
 			if(hours || minutes)
@@ -529,13 +468,10 @@ void handleCommunicationWithWindow(char* data){
 		if(windowSet){
 			sendMsg(CANCEL_OPERATION,&window_addr,NULL);
 			waitingForACK = true;
-			ctimer_restart(&ACK_timer);			
-
+			ctimer_restart(&ACK_timer);
 		}
 		else{
-			printf("Window has no parameters configured\n");
-			return;
-			//STAMPA DISPOSITIVI DISPONIBILI
+			printf("Window has no timers configured\n");
 		}
 		return;
 	}

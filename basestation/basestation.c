@@ -72,6 +72,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 		LOG_INFO("All the nodes are correctly synchronized \n");
 		ctimer_stop(&broad_timer);
 		leds_on(LEDS_GREEN);
+		leds_off(LEDS_RED);
 
 		if(!firstTime){
 			ctimer_stop(&green_led);

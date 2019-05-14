@@ -245,6 +245,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		basestation_addr = *src;
 		node_sync();
 		alreadySynchronized = true;
+		ctimer_restart(&checkInfoEnvironment);
 	}
 
 	
@@ -312,6 +313,7 @@ PROCESS_THREAD(window_proc, ev, data){
 
 	//tempo momentaneo
 	ctimer_set(&checkInfoEnvironment,5*CLOCK_SECOND,environmentCallback,NULL);
+	ctimer_stop(&checkInfoEnvironment);
 	ctimer_set(&noCheckInfoEnvironment,20*CLOCK_SECOND,noEnvironmentCallback,NULL);
 	ctimer_stop(&noCheckInfoEnvironment);
 

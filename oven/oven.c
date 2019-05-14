@@ -256,7 +256,7 @@ PROCESS_THREAD(oven_proc, ev, data){
 				ctimer_stop(&red_led);
 				leds_off(LEDS_RED);
 				printf("Preparation ended \n");
-				sendMsg(OPERATION_COMPLETED,&basestation_addr,NULL);
+				sendMsg(OPERATION_COMPLETED,&basestation_addr,"preparation");
 			}
 		}
 	}

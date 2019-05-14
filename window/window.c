@@ -182,7 +182,7 @@ void handleSetTemperature(char* content){
 
 void handleSetHumidity(char* content){
 	userHumidity = atoi(content);
-	LOG_INFO("User userHumidity set to : %d %\n", userHumidity);
+	LOG_INFO("User userHumidity set to : %d \n", userHumidity);
 	sendMsg(OPERATION_OK, &basestation_addr, NULL);
 }
 
@@ -191,7 +191,6 @@ void handleSetTimerOpen(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
-	//bool error = false;
 		
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);
@@ -211,7 +210,6 @@ void handleSetTimerClose(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
-	//bool error = false;
 		
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);

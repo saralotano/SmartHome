@@ -3,7 +3,7 @@
 #include "net/nullnet/nullnet.h"
 #include "os/dev/leds.h"
 //#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
-//#include "os/dev/button-hal.h" //LAUNCHPAD
+//#include "os/dev/button-hal.h"					  //LAUNCHPAD
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include "sys/clock.h"
 #include "sys/ctimer.h"
 #include "sys/etimer.h"
-//#include "batmon-sensor.h" //LAUNCHPAD
+//#include "batmon-sensor.h" 						 //LAUNCHPAD
 #include "random.h"
 #include "parameters.h"
 
@@ -21,7 +21,7 @@
 
 static linkaddr_t basestation_addr;
 static struct ctimer green_led;
-//static struct ctimer cooking_timer; //LAUNCHPAD
+//static struct ctimer cooking_timer;				 //LAUNCHPAD
 static struct ctimer red_led;
 static struct ctimer b_leds;
 static bool firstTimeBlinkRed = true;
@@ -58,15 +58,14 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 }
 
 
-//serve a simulare la fase di riscaldamento del forno aggiunge alla tempratura del sensore un valore random di massimo 50 gradi
+//This function is used in the oven pre-heating phase and it randomly adds a  maximum of 50°C to the oven temperature
 static void getCurrentTemperature(void){
 	current_temp += random_rand()%50;
 	printf("Pre-heating phase : current temperature = %d C\n", current_temp);
 	return;
 }
 
-
-//si occupa di far lampeggiare il led rosso quando la cottura è terminata
+//This function is called when the cooking is finished. The red led starts blinking 
 void blinkRedLedCallback(){
 	counter++;	//COOJA
 	leds_toggle(LEDS_RED);
@@ -79,7 +78,8 @@ void blinkRedLedCallback(){
 	else
 		ctimer_restart(&red_led);
 
-	if(counter == 2){	//COOJA
+	//COOJA /*
+	if(counter == 2){	
 		ctimer_stop(&red_led);
 		phase = INITIAL_PHASE;
 		firstTimeBlinkRed = true;
@@ -88,24 +88,23 @@ void blinkRedLedCallback(){
 		counter = 0;
 		sendMsg(OPERATION_COMPLETED,&basestation_addr,"preparation");
 	}
+	//COOJA  */
 
 	return;
 }
 
-//this callback function is called when the cooking time expires
+//This callback function is called when the cooking time expires
 void endPreparationCallback(){
 	printf("Cooking ended, remove the preparation and push the right botton\n");
 	phase = PREPARATION_COMPLETED;
 	buttonAvailable = true;
 	leds_off(LEDS_GREEN);
 	leds_on(LEDS_RED);
-	//ctimer_stop(&cooking_timer); //Non necessario, perchè non viene fatta la restart su questo timer e si stoppa in automatico
 	ctimer_set(&red_led, 3*CLOCK_SECOND, blinkRedLedCallback, NULL);
 	return;
 }
 
 
-//prehating phase function
 void heatingPhase(){
 	leds_toggle(LEDS_GREEN);
 	getCurrentTemperature();
@@ -115,8 +114,8 @@ void heatingPhase(){
 		printf("Insert the preparation and push the left button \n");
 		buttonAvailable = true;
 		phase = COOKING_PHASE;
-		printf("Cooking for %d minutes . . . \n", oven_time);	//COOJA
-		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//aCOOJA
+		printf("Cooking for %d minutes . . . \n", oven_time);							//COOJA
+		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//COOJA
 		//cooking time is simulated in seconds and not in minutes
 		return;
 	}
@@ -129,14 +128,12 @@ void heatingPhase(){
 
 void start_preparation (){
 	LOG_INFO("\nCooking parameters: %d degrees for %d minutes\n", oven_degree, oven_time);
-	//LAUNCHPAD
-	/* non c'è il batmon sensor su cooja
-	SENSORS_ACTIVATE(batmon_sensor);
-	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//set the current temperature of the oven
-	SENSORS_DEACTIVATE(batmon_sensor);
-	*/
-	//COOJA
-	current_temp = 30; // va modificato e preso dal sensore
+	
+	SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
+	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//LAUNCHPAD
+	SENSORS_DEACTIVATE(batmon_sensor);								//LAUNCHPAD
+	
+	current_temp = 30; 	//COOJA
 	LOG_INFO("Current sensor temperature : %d degrees\n", current_temp);
 	phase = PREHEATING_PHASE;
 	ctimer_set(&green_led, CLOCK_SECOND, heatingPhase, NULL);
@@ -166,8 +163,8 @@ void handleStartOperation(char* content){
 	oven_degree = atoi(ptr);
 	ptr = strtok(NULL,delim);
 	oven_time = atoi(ptr);
-	LOG_INFO("oven_degree: %d\n",oven_degree);
-	LOG_INFO("oven_time: %d\n",oven_time);
+	LOG_INFO("Cooking temperature: %d °C \n",oven_degree);
+	LOG_INFO("Cooking time: %d minutes \n",oven_time);
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);	
 	start_preparation();
 }
@@ -191,7 +188,7 @@ void handleCancelOperation(){
 			sendMsg(CANCEL_ERR,&basestation_addr,NULL);
 			break;
 		default:
-			LOG_INFO("Phase error\n");
+			LOG_INFO("ERROR: phase status not consistent\n");
 			break;
 	}
 }
@@ -201,7 +198,7 @@ void handleCancelOperation(){
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 
 	if(linkaddr_cmp(dest, &linkaddr_null) && !alreadySynchronized){	
-		LOG_INFO("Broadcast received\n");
+		LOG_INFO("Broadcast message received\n");
 		leds_off(LEDS_RED);
 		basestation_addr = *src;
 		node_sync();
@@ -212,11 +209,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
 		uint8_t op = *(uint8_t *)data;
 		char* content = ((char*)data)+1;
-		/*char received_data[strlen((char *)content) + 1];
-		if(len == strlen((char *)data) + 1) 
-			memcpy(&received_data, content, strlen((char *)content) + 1);*/
-		
-		//splitting of the received string temperature,cooking_time
+
 		switch(op){
 			case START_OPERATION:
 				handleStartOperation(content);
@@ -225,7 +218,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 				handleCancelOperation();
 				break;
 			default:
-				LOG_INFO("Unrecognized code\n");
+				LOG_INFO("ERROR: Code not found\n");
 				break;
 		}
 	
@@ -239,19 +232,19 @@ PROCESS_THREAD(oven_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
-	//LAUNCHPAD
-	/* //questa parte si occupa della gestione degli eventi legati ai buttons
+	
+	/* //LAUNCHPAD
 
 	while(1){
 		PROCESS_YIELD();
 		button_hal_button_t *btn = (button_hal_button_t *)data;
 		if(ev == button_hal_press_event){
-			if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_LEFT && buttonAvailable){	//la preparazione è stata inserita nel forno
+			if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_LEFT && buttonAvailable){ //the preparation is inserted in the oven
 				buttonAvailable = false;
 				printf("Cooking for %d minutes . . . \n", oven_time);
 				ctimer_set(&cooking_timer, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);
 			} 
-			else if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_RIGHT && buttonAvailable) { //la preparazione è stata rimossa dal forno
+			else if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_RIGHT && buttonAvailable) { //the preparationis removed from the oven
 				buttonAvailable = false;
 				ctimer_stop(&red_led);
 				leds_off(LEDS_RED);

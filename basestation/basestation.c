@@ -10,37 +10,43 @@
 #include "sys/ctimer.h"
 #include "os/dev/serial-line.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
+//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" 	//LAUNCHPAD
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-
-static linkaddr_t oven_addr;
-static linkaddr_t window_addr;
 static struct ctimer broad_timer;
 static struct ctimer reactive_broad_timer;
 static struct ctimer ACK_timer;
 static struct ctimer green_led;
-static bool oven_sync = false;
-static bool openStatusWindow = false, closeStatusWindow = false;
-static bool settingOpenRollerShutter = false, settingTemperature = false, settingHumidity = false;
-static bool settingCloseRollerShutter = false;
-static bool window_sync = false;
-static bool settingParametersOven = false;
-static bool communicationWithOven = false, communicationWithWindow = false;
 static bool waitingForACK = false;
-static bool openWindowSet = false, closeWindowSet = false; //to know if there are parameters set on the window
-static bool ovenBusy = false, windowBusy = false, basestationBusy = false;
 static bool firstTime = true;
 static int num_sync_nodes = 0;	
 static int num_sync_attempts = 0;	
 static int number_nodes = 0;
+static bool basestationBusy = false;
+
+//oven variables
+static linkaddr_t oven_addr;
+static bool oven_sync = false;
+static bool ovenBusy = false;
+static bool settingParametersOven = false;
+
+
+//window variables
+static linkaddr_t window_addr;
+static bool window_sync = false;
+static bool windowBusy = false;
+static bool openStatusWindow = false, closeStatusWindow = false;
+static bool settingOpenRollerShutter = false, settingCloseRollerShutter = false;
+static bool settingTemperature = false, settingHumidity = false;
+static bool openWindowSet = false, closeWindowSet = false; //they are used to know if the window has some parameters set
+static bool communicationWithOven = false, communicationWithWindow = false;
 
 void broadtimeCallback();
 void selectDevice();
 
-PROCESS(basestation_proc, "basestation");
 
+PROCESS(basestation_proc, "basestation");
 AUTOSTART_PROCESSES(&basestation_proc);
 
 
@@ -69,7 +75,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 	LOG_INFO("Number of synchronized nodes: %d \n", num_sync_nodes);
 
 	if(num_sync_nodes == number_nodes){
-		LOG_INFO("All the nodes are correctly synchronized \n");
+		printf("All the nodes are correctly synchronized \n");
 		ctimer_stop(&broad_timer);
 		leds_on(LEDS_GREEN);
 		leds_off(LEDS_RED);
@@ -83,12 +89,12 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 	}
 }
 
+
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
 		printf("The oven has correctly received all the parameters. \n");
 		ovenBusy = true;
 	}
-
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
 		if(openStatusWindow){
@@ -139,6 +145,7 @@ void handleOperationCompleted(const linkaddr_t* src, char* content){
 	}
 }
 
+
 void handleCancelOK(const linkaddr_t* src, char* content){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
@@ -148,14 +155,14 @@ void handleCancelOK(const linkaddr_t* src, char* content){
 	if(linkaddr_cmp(src,&window_addr)){	
 		if(!strcmp(content,"openAlarm")){
 			openWindowSet = false;
-			printf("The opening for roller shutter has been canceled\n");
+			printf("The opening command for roller shutter has been canceled\n");
 		}
 		else if(!strcmp(content,"closeAlarm")){
 			closeWindowSet = false;
-			printf("The closing for roller shutter has been canceled\n");
+			printf("The closing command for roller shutter has been canceled\n");
 		}
 		if(!closeWindowSet && !openWindowSet)
-		printf("The window has now no timer assigned\n");
+		printf("The window has now no timers assigned\n");
 	}
 
 	waitingForACK = false;
@@ -163,6 +170,7 @@ void handleCancelOK(const linkaddr_t* src, char* content){
 	ctimer_stop(&ACK_timer);
 	selectDevice();
 }
+
 
 void handleCancelErr(){
 	printf("The preparation is already finished, cannot cancel the operation\n");
@@ -172,7 +180,6 @@ void handleCancelErr(){
 	selectDevice();
 	return;
 }
-
 
 
 char* getMsg(const void *data, uint16_t len){
@@ -185,7 +192,6 @@ char* getMsg(const void *data, uint16_t len){
 
 
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
-
 	uint8_t op = *(uint8_t *)data;
 
 	switch(op){
@@ -208,15 +214,13 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			handleCancelErr();
 			break;
 		default:
-			LOG_INFO("Error: Code not found \n");
+			LOG_INFO("ERROR: Code not found \n");
 			return;
 	}
-	
 }
 
 
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
-
 	int size;
 	if(content == NULL)
 		size = 0;
@@ -235,30 +239,31 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	return;
 }
 
+
 bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	if(ptr == NULL){
-		printf("Format error: unknown parameters \n");
+		printf("FORMAT_ERROR: unknown parameters \n");
 		return false;
 	}
 
 	uint8_t hours = atoi(ptr);
 	if(!hours){
 		if(strcmp(ptr,"0") && strcmp(ptr,"00")){
-			printf("Format error: hours not correct \n");
+			printf("FORMAT_ERROR: hours not correct \n");
 			return false;
 		}
 	}
 
 	if(hours < 0 || hours > 23){
-		printf("Format error: hours not correct \n");
+		printf("FORMAT_ERROR: hours not correct \n");
 		return false;
 	}
 
 	ptr = strtok(NULL,delim);
 	if(ptr == NULL){
-		printf("Format error: not enough parameters \n");
+		printf("FORMAT_ERROR: not enough parameters \n");
 		return false;
 	}
 
@@ -269,72 +274,63 @@ bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes)
 			return false;
 		}
 	}
-
 	
 	if(minutes < 0 || minutes > 59){
-		printf("Format error: alarm time not correct\n");
+		printf("FORMAT_ERROR: alarm time not correct\n");
 		return false;
 	}
 
 	ptr = strtok(NULL,delim);
 	if(ptr != NULL){
-		printf("Format error: too many parameters \n");
+		printf("FORMAT_ERROR: too many parameters \n");
 		return false;
 	}
 	
-	LOG_INFO("hours: %d\n",hours);
-	LOG_INFO("minutes: %d\n",minutes);
-
 	*retHours = hours;
 	*retMinutes = minutes;
 	return true;
 }
 
-bool checkParametersOven(char* content){
 
+bool checkParametersOven(char* content){
 	if(!atoi(content)){
-			printf("Format error: unknown parameters \n");
+			printf("FORMAT_ERROR: unknown parameters \n");
 			return false;
 	}
-
 	char delim[] = ",";
 	char* ptr = strtok(content,delim);
 	if(ptr == NULL){
-		printf("Format error: unknown parameters \n");
+		printf("FORMAT_ERROR: unknown parameters \n");
 		return false;
 	}
 	int oven_time, oven_degree;
 	oven_degree = atoi(ptr);
-	//bool error = false;
 		
 	if(oven_degree < 50 || oven_degree > 250){
-		printf("Format error: temperature not correct \n");
+		printf("FORMAT_ERROR: temperature not correct \n");
 		return false;
 	}
 
 	ptr = strtok(NULL,delim);
 	if(ptr == NULL){
-		printf("Format error: not enough parameters\n");
+		printf("FORMAT_ERROR: not enough parameters\n");
 		return false;
 	}
 
-	oven_time = atoi(ptr);
-	
+	oven_time = atoi(ptr);	
 	if(oven_time <= 0 || oven_time > 300){
-		printf("Format error: cooking time not correct\n");
+		printf("FORMAT_ERROR: cooking time not correct\n");
 		return false;
 	}
-
 	ptr = strtok(NULL,delim);
 	if(ptr != NULL){
-		printf("Format error: too many parameters \n");
+		printf("FORMAT_ERROR: too many parameters \n");
 		return false;
 	}
-
-	LOG_INFO("checkParametersOven OK \n");
 
 	return true;
 }
+
 
 void checkAndSendParametersOven(char* data){
 	if(!strcmp(data,"back")){
@@ -344,7 +340,6 @@ void checkAndSendParametersOven(char* data){
 		communicationWithOven = false;
 		return;
 	}
-
 	char parametersOven[strlen(data)+1];
 	strcpy(parametersOven,data);
 	if(checkParametersOven(data)){
@@ -355,46 +350,39 @@ void checkAndSendParametersOven(char* data){
 	}
 }
 
+
 void handleCommunicationWithOven(char* data){
-
-	if(settingParametersOven){
-		checkAndSendParametersOven(data);
-	}
-
+	if(settingParametersOven)
+		checkAndSendParametersOven(data);	
 	else{
-	
-		if(!strcmp(data,"cancel")){
-	
-			if(ovenBusy){
 
+		if(!strcmp(data,"cancel")){	
+			if(ovenBusy){
 				sendMsg(CANCEL_OPERATION,&oven_addr,NULL);
 				waitingForACK = true;
 				ctimer_restart(&ACK_timer);	
 				communicationWithOven = false;
 				selectDevice();		
-
 			}
 			else{
 				printf("Oven is not busy \n");
 			}
 		}
-
 		else if(!strcmp(data,"back")){
 			basestationBusy = false;
 			communicationWithOven = false;
 			selectDevice();		
-		}
-	
+		}	
 		else if(!strcmp(data,"setParameters") || !strcmp(data,"setparameters")){
 			settingParametersOven = true;
-			printf("Insert temperature (Celsius degrees) and cooking time (minutes) separated by a comma\n");
+			printf("Insert temperature (in °C) and cooking time (minutes) separated by a comma\n");
 			printf("Example: 180,30\n");			
 		}
-
 		else
 			printf("ERROR: Command not found\n");
 	}
 }
+
 
 void checkAndSendTemperature(char* data){
 	if(!strcmp(data,"back")){
@@ -411,9 +399,10 @@ void checkAndSendTemperature(char* data){
 		settingTemperature = false;
 		ctimer_restart(&ACK_timer);	
 	}else{
-		printf("ERROR: Temperature must be a number between 15 and 30 °C\n");
+		printf("ERROR: Temperature must be a number between 15°C and 30°C\n");
 	}
 }
+
 
 void checkAndSendHumidity(char* data){
 	if(!strcmp(data,"back")){
@@ -430,9 +419,10 @@ void checkAndSendHumidity(char* data){
 		settingHumidity = false;
 		ctimer_restart(&ACK_timer);	
 	}else{
-		printf("ERROR: Humidity must be a number between 15 and 60\n");
+		printf("ERROR: Humidity must be a number between 15%% and 60%% \n");
 	}
 }
+
 
 void checkAndSendOpenRollerShutter(char* data){
 	if(!strcmp(data,"back")){
@@ -445,7 +435,7 @@ void checkAndSendOpenRollerShutter(char* data){
 	char parametersWindow[strlen(data)+1];
 	strcpy(parametersWindow,data);
 	uint8_t hours,minutes;
-	if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
+	if(checkParametersWindow(data,&hours,&minutes)){ //to avoid crash of the program, if the user types a string not convertible to number
 		sendMsg(SET_TIMER_OPEN,&window_addr,parametersWindow);
 		waitingForACK = true;
 		if(hours || minutes)
@@ -456,6 +446,7 @@ void checkAndSendOpenRollerShutter(char* data){
 		printf("ERROR: Check the format of inserted data\n");
 	}	
 }
+
 
 void checkAndSendCloseRollerShutter(char* data){
 	if(!strcmp(data,"back")){
@@ -468,7 +459,7 @@ void checkAndSendCloseRollerShutter(char* data){
 	char parametersWindow[strlen(data)+1];
 	strcpy(parametersWindow,data);
 	uint8_t hours,minutes;
-	if(checkParametersWindow(data,&hours,&minutes)){//to avoid crash of the program, if the user types a string not convertible to number
+	if(checkParametersWindow(data,&hours,&minutes)){ //to avoid crash of the program, if the user types a string not convertible to number
 		sendMsg(SET_TIMER_CLOSE,&window_addr,parametersWindow);
 		waitingForACK = true;
 		if(hours || minutes)
@@ -479,6 +470,7 @@ void checkAndSendCloseRollerShutter(char* data){
 		printf("ERROR: Check the format of inserted data\n");
 	}	
 }
+
 
 void handleCommunicationWithWindow(char* data){
 	if(settingTemperature){
@@ -579,6 +571,7 @@ void handleCommunicationWithWindow(char* data){
 		printf("ERROR: Command not found\n");
 }
 
+
 void selectDevice(){
 	printf("Select a device to comunicate with \n");
 	if(oven_sync)
@@ -586,6 +579,7 @@ void selectDevice(){
 	if(window_sync)
 		printf(" - window\n");
 }
+
 
 void handle_serial_line(char* data){
 
@@ -611,15 +605,14 @@ void handle_serial_line(char* data){
 		}
 
 		if(number_nodes > 0){
-			printf("Error: Command not found \n");
+			printf("ERROR: Command not found \n");
 			selectDevice();
 		}
 		else{
 			number_nodes = atoi(data);
 			if(number_nodes <= 0){
 				number_nodes = 0;
-				printf("Error: Number of nodes not correct\n");
-				printf("Insert the number of sensor nodes\n");
+				printf("ERROR: Number of nodes not correct\nInsert the number of sensor nodes\n");
 			}
 			else{
 				LOG_INFO("Number of sensor nodes = %d\n", number_nodes);
@@ -627,7 +620,6 @@ void handle_serial_line(char* data){
 			}
 		}
 	}
-
 	//BASESTATION BUSY, the user has inserted the command "deviceName"
 	else{
 		if(communicationWithOven){
@@ -643,11 +635,11 @@ void handle_serial_line(char* data){
 
 }
 
+
 void blinkGreenLedCallback(){
 	leds_toggle(LEDS_GREEN);
 	ctimer_restart(&green_led);
 }
-
 
 
 void ackTimerCallback(){
@@ -672,6 +664,7 @@ void ackTimerCallback(){
 	basestationBusy = false;
 	waitingForACK = false;
 }
+
 
 void discoverNodes(){
 	sendMsg(DISCOVER_REQ,NULL,NULL);
@@ -703,6 +696,7 @@ void discoverNodes(){
 		ctimer_restart(&broad_timer);
 }
 
+
 void broadtimeCallback(){
 	ctimer_restart(&broad_timer);
 }
@@ -711,10 +705,9 @@ void broadtimeCallback(){
 PROCESS_THREAD(basestation_proc, ev, data){
 
 	PROCESS_BEGIN();
-
-	//LAUNCHPAD
-	//cc26xx_uart_set_input(serial_line_input_byte);
-	//serial_line_init();
+	
+	//cc26xx_uart_set_input(serial_line_input_byte);	//LAUNCHPAD
+	//serial_line_init();								//LAUNCHPAD
 	leds_on(LEDS_RED);
 	nullnet_set_input_callback(input_callback);
 
@@ -728,8 +721,7 @@ PROCESS_THREAD(basestation_proc, ev, data){
 	while(1){
 
 		PROCESS_WAIT_EVENT_UNTIL(ev == serial_line_event_message);
-		handle_serial_line((char*)data);
-		
+		handle_serial_line((char*)data);	
 	}
 
 	PROCESS_END();

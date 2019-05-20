@@ -129,9 +129,9 @@ void heatingPhase(){
 void start_preparation (){
 	LOG_INFO("\nCooking parameters: %d degrees for %d minutes\n", oven_degree, oven_time);
 	
-	SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
-	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//LAUNCHPAD
-	SENSORS_DEACTIVATE(batmon_sensor);								//LAUNCHPAD
+	//SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
+	//current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//LAUNCHPAD
+	//SENSORS_DEACTIVATE(batmon_sensor);							//LAUNCHPAD
 	
 	current_temp = 30; 	//COOJA
 	LOG_INFO("Current sensor temperature : %d degrees\n", current_temp);

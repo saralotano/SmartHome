@@ -21,8 +21,8 @@
 
 static linkaddr_t basestation_addr;
 
-static struct ctimer open_alarm;
-static struct ctimer close_alarm;
+static struct ctimer lift_alarm;
+static struct ctimer lower_alarm;
 static struct ctimer automaticMode;
 static struct ctimer manualMode;
 
@@ -136,30 +136,30 @@ void environmentCallback(){
 }
 
 
-void manualOpenShutter(){
+void manualLiftShutter(){
 	printf("Lift roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualOpenShutter");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLiftShutter");
 	return;
 }
 
 
-void manualCloseShutter(){
+void manualLowerShutter(){
 	printf("Lower roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualCloseShutter");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLowerShutter");
 	return;
 }
 
 
-void openAlarmCallback(){	
+void liftAlarmCallback(){	
 	printf("Lift roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"openShutter");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"liftShutter");
 	return;
 }
 
 
-void closeAlarmCallback(){
+void lowerAlarmCallback(){
 	printf("Lower roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"closeShutter");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"lowerShutter");
 	return;
 }
 
@@ -191,8 +191,8 @@ void handleSetHumidity(char* content){
 }
 
 
-void handleSetTimerOpen(char* content){
-	LOG_INFO("handleSetTimerOpen \n");
+void handleSetTimerLift(char* content){
+	LOG_INFO("handleSetTimerLift \n");
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
@@ -200,17 +200,17 @@ void handleSetTimerOpen(char* content){
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);
 	
-	//LOG_INFO("hours: %d\n",hours);
-	//LOG_INFO("minutes: %d\n",minutes);
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
 
 	//int seconds = minutes*60 + hours*3600; 
 	sendMsg(OPERATION_OK,&basestation_addr,"setOpenShutter");		
-	ctimer_set(&open_alarm, minutes * CLOCK_SECOND, openAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lift_alarm, minutes * CLOCK_SECOND, liftAlarmCallback, NULL);	//we must use seconds
 }
 
 
-void handleSetTimerClose(char* content){
-	LOG_INFO("handleSetTimerClose \n");
+void handleSetTimerLower(char* content){
+	LOG_INFO("handleSetTimerLower \n");
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
@@ -218,25 +218,25 @@ void handleSetTimerClose(char* content){
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);
 	
-	//LOG_INFO("hours: %d\n",hours);
-	//LOG_INFO("minutes: %d\n",minutes);
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
 
 	//int seconds = minutes*60 + hours*3600;
 	sendMsg(OPERATION_OK,&basestation_addr,"setCloseShutter");		
-	ctimer_set(&close_alarm, minutes * CLOCK_SECOND, closeAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lower_alarm, minutes * CLOCK_SECOND, lowerAlarmCallback, NULL);	//we must use seconds
 }
 
 
 void handleCancelOperation(char* content){
-	if(!strcmp(content,"openTimer")){
-		printf("Open Alarm reset\n");
-		ctimer_stop(&open_alarm);
-		sendMsg(CANCEL_OK,&basestation_addr,"openAlarm");
+	if(!strcmp(content,"liftTimer")){
+		printf("Lift Alarm reset\n");
+		ctimer_stop(&lift_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"liftAlarm");
 	}
-	else if(!strcmp(content,"closeTimer")){
-		printf("Close Alarm reset\n");
-		ctimer_stop(&close_alarm);
-		sendMsg(CANCEL_OK,&basestation_addr,"closeAlarm");
+	else if(!strcmp(content,"lowerTimer")){
+		printf("Lower Alarm reset\n");
+		ctimer_stop(&lower_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"lowerAlarm");
 	}
 }
 
@@ -268,20 +268,20 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 				handleCloseWindow();
 				break;
 
-			case OPEN_SHUTTER:
-				manualOpenShutter();
+			case LIFT_SHUTTER:
+				manualLiftShutter();
 				break;
 
-			case CLOSE_SHUTTER:
-				manualCloseShutter();
+			case LOWER_SHUTTER:
+				manualLowerShutter();
 				break;
 
-			case SET_TIMER_OPEN:
-				handleSetTimerOpen(content);
+			case SET_TIMER_LIFT:
+				handleSetTimerLift(content);
 				break;
 
-			case SET_TIMER_CLOSE:
-				handleSetTimerClose(content);
+			case SET_TIMER_LOWER:
+				handleSetTimerLower(content);
 				break;
 
 			case SET_TEMPERATURE:

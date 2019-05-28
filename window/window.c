@@ -25,6 +25,7 @@ static struct ctimer lift_alarm;
 static struct ctimer lower_alarm;
 static struct ctimer automaticMode;
 static struct ctimer manualMode;
+static struct ctimer humidityTimer;
 
 static int userTemperature = DEFAULT_TEMPERATURE;
 static int userHumidity = DEFAULT_HUMIDITY;
@@ -131,17 +132,6 @@ void environmentCallback(){
 		}
 	}
 	
-	if(currentHumidity > userHumidity){
-		currentHumidity-=random_rand()%5;
-	}
-	else{
-		currentHumidity+=random_rand()%10;
-	}
-	if(currentHumidity > userHumidity){
-		printf("Too high humidity level. Sending message to the basestation\n");
-		sendMsg(HUMIDITY_LEVEL,&basestation_addr,"humidity");
-	}
-
 	if(!changeStatus){
 		ctimer_restart(&automaticMode);
 	}
@@ -262,6 +252,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		node_sync();
 		alreadySynchronized = true;
 		ctimer_restart(&automaticMode);
+		ctimer_restart(&humidityTimer);
 	}
 	
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
@@ -315,6 +306,24 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	}
 }
 
+void humidityCallback(){
+	if(alreadySynchronized){
+		if(currentHumidity > userHumidity){
+			currentHumidity=0;
+		}
+		else{
+			currentHumidity+=random_rand()%10;
+		}
+
+		LOG_INFO("Current humidity %d\n",currentHumidity);
+		if(currentHumidity > userHumidity){
+			printf("Humidity level is too high. Sending message to the basestation\n");
+			sendMsg(HUMIDITY_LEVEL,&basestation_addr,"humidity");
+		}
+	}
+	ctimer_restart(&humidityTimer);
+}
+
 
 PROCESS_THREAD(window_proc, ev, data){
 
@@ -323,10 +332,12 @@ PROCESS_THREAD(window_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
-	ctimer_set(&automaticMode, 5*CLOCK_SECOND, environmentCallback, NULL);	//cambiare 5 con un numero più alto
+	ctimer_set(&automaticMode, 5*CLOCK_SECOND, environmentCallback, NULL);	
 	ctimer_stop(&automaticMode);
-	ctimer_set(&manualMode, 20*CLOCK_SECOND, noEnvironmentCallback, NULL);	//cambiare 20 con un numero più alto
+	ctimer_set(&manualMode, 20*CLOCK_SECOND, noEnvironmentCallback, NULL);	
 	ctimer_stop(&manualMode);
+	ctimer_set(&humidityTimer, 15*CLOCK_SECOND, humidityCallback, NULL); //timer used for checking humidity periodically
+	ctimer_stop(&humidityTimer);
 
 	//LAUNCHPAD
 	/*while(1){

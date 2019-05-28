@@ -181,6 +181,10 @@ void handleCancelErr(){
 	return;
 }
 
+void handleHumidityLevel(){
+	printf("Room humidity is too high. Sending command to actuators.\n");
+}
+
 
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
@@ -212,6 +216,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 		case CANCEL_ERR:
 			handleCancelErr();
+			break;
+		case HUMIDITY_LEVEL:
+			handleHumidityLevel();
 			break;
 		default:
 			LOG_INFO("ERROR: Code not found \n");
@@ -503,6 +510,9 @@ void handleCommunicationWithWindow(char* data){
 		}
 		else{
 			printf("Window has no timer for roller shutter opening configured\n");
+			selectDevice();
+			communicationWithWindow = false;
+			basestationBusy = false;
 		}
 	}
 
@@ -514,6 +524,9 @@ void handleCommunicationWithWindow(char* data){
 		}
 		else{
 			printf("Window has no timer for roller shutter closing configured\n");
+			selectDevice();
+			communicationWithWindow = false;
+			basestationBusy = false;
 		}
 	}
 

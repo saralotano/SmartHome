@@ -17,4 +17,5 @@
 #define LIFT_SHUTTER 16
 #define LOWER_SHUTTER 17
 #define DEFAULT_TEMPERATURE 18	 //expressed in Celsius degrees
+#define HUMIDITY_LEVEL 19
 #define DEFAULT_HUMIDITY 35	 	 //expressed in percentage

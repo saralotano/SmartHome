@@ -29,6 +29,7 @@ static struct ctimer manualMode;
 static int userTemperature = DEFAULT_TEMPERATURE;
 static int userHumidity = DEFAULT_HUMIDITY;
 static int currentTemp = 0;
+static int currentHumidity = 0;
 
 static bool alreadySynchronized = false;
 static bool windowOpened = false;
@@ -128,6 +129,17 @@ void environmentCallback(){
 			changeStatus = true;
 			openWindow();
 		}
+	}
+	
+	if(currentHumidity > userHumidity){
+		currentHumidity-=random_rand()%5;
+	}
+	else{
+		currentHumidity+=random_rand()%10;
+	}
+	if(currentHumidity > userHumidity){
+		printf("Too high humidity level. Sending message to the basestation\n");
+		sendMsg(HUMIDITY_LEVEL,&basestation_addr,"humidity");
 	}
 
 	if(!changeStatus){

@@ -2,8 +2,8 @@
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
-//#include "os/dev/button-hal.h"					  //LAUNCHPAD
+#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" //LAUNCHPAD
+#include "os/dev/button-hal.h"					  //LAUNCHPAD
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include "sys/clock.h"
 #include "sys/ctimer.h"
 #include "sys/etimer.h"
-//#include "batmon-sensor.h" 						 //LAUNCHPAD
+#include "batmon-sensor.h" 						 //LAUNCHPAD
 #include "random.h"
 #include "parameters.h"
 
@@ -21,7 +21,7 @@
 
 static linkaddr_t basestation_addr;
 static struct ctimer green_led;
-//static struct ctimer cooking_timer;				 //LAUNCHPAD
+static struct ctimer cooking_timer;				 //LAUNCHPAD
 static struct ctimer red_led;
 static struct ctimer b_leds;
 static bool firstTimeBlinkRed = true;
@@ -31,7 +31,6 @@ static int current_temp = 0;
 static int oven_degree = 0;
 static int oven_time = 0;
 static int phase = INITIAL_PHASE;
-int counter = 0; //COOJA
 
 
 PROCESS(oven_proc, "oven_proc");
@@ -67,7 +66,6 @@ static void getCurrentTemperature(void){
 
 //This function is called when the cooking is finished. The red led starts blinking 
 void blinkRedLedCallback(){
-	counter++;	//COOJA
 	leds_toggle(LEDS_RED);
 	printf("Remove the preparation, please\n");	
 
@@ -77,18 +75,6 @@ void blinkRedLedCallback(){
 	}
 	else
 		ctimer_restart(&red_led);
-
-	//COOJA /*
-	if(counter == 2){	
-		ctimer_stop(&red_led);
-		phase = INITIAL_PHASE;
-		firstTimeBlinkRed = true;
-		leds_off(LEDS_RED);
-		printf("Preparation ended \n");
-		counter = 0;
-		sendMsg(OPERATION_COMPLETED,&basestation_addr,"preparation");
-	}
-	//COOJA  */
 
 	return;
 }
@@ -114,9 +100,6 @@ void heatingPhase(){
 		printf("Insert the preparation and push the left button \n");
 		buttonAvailable = true;
 		phase = COOKING_PHASE;
-		printf("Cooking for %d minutes . . . \n", oven_time);							//COOJA
-		ctimer_set(&b_leds, oven_time * CLOCK_SECOND, endPreparationCallback, NULL);	//COOJA
-		//cooking time is simulated in seconds and not in minutes
 		return;
 	}
 
@@ -133,7 +116,6 @@ void start_preparation (){
 	current_temp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//LAUNCHPAD
 	SENSORS_DEACTIVATE(batmon_sensor);								//LAUNCHPAD
 	
-	current_temp = 30; 	//COOJA
 	LOG_INFO("Current sensor temperature : %d degrees\n", current_temp);
 	phase = PREHEATING_PHASE;
 	ctimer_set(&green_led, CLOCK_SECOND, heatingPhase, NULL);
@@ -232,9 +214,6 @@ PROCESS_THREAD(oven_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
-	
-	/* //LAUNCHPAD
-
 	while(1){
 		PROCESS_YIELD();
 		button_hal_button_t *btn = (button_hal_button_t *)data;
@@ -253,8 +232,6 @@ PROCESS_THREAD(oven_proc, ev, data){
 			}
 		}
 	}
-
-	*/
 
 	PROCESS_END();
 }

@@ -10,7 +10,7 @@
 #include "sys/ctimer.h"
 #include "os/dev/serial-line.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h" 	//LAUNCHPAD
+#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"
 #define LOG_MODULE "App"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
@@ -31,15 +31,14 @@ static bool oven_sync = false;
 static bool ovenBusy = false;
 static bool settingParametersOven = false;
 
-
 //window variables
 static linkaddr_t window_addr;
 static bool window_sync = false;
 static bool windowBusy = false;
 static bool openStatusWindow = false, closeStatusWindow = false;
-static bool settingOpenRollerShutter = false, settingCloseRollerShutter = false;
+static bool settingLiftRollerShutter = false, settingLowerRollerShutter = false;
 static bool settingTemperature = false, settingHumidity = false;
-static bool openWindowSet = false, closeWindowSet = false; //they are used to know if the window has some parameters set
+static bool liftRollerSet = false, lowerRollerSet = false; //they are used to know if the window has some parameters set
 static bool communicationWithOven = false, communicationWithWindow = false;
 
 void broadtimeCallback();
@@ -98,10 +97,10 @@ void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&window_addr)){
 		printf("The window has correctly received all the parameters. \n");
 		if(openStatusWindow){
-			openWindowSet = true;
+			liftRollerSet = true;
 			openStatusWindow = false;
 		}else if(closeStatusWindow){
-			closeWindowSet = true;
+			lowerRollerSet = true;
 			closeStatusWindow = false;
 		}
 	}
@@ -122,20 +121,20 @@ void handleOperationCompleted(const linkaddr_t* src, char* content){
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
 		windowBusy = false;
-		if(!strcmp(content,"openShutter")){
-			openWindowSet = false;
+		if(!strcmp(content,"liftShutter")){
+			liftRollerSet = false;
 			printf("The roller shutter is lifted up\n");
-		}else if(!strcmp(content,"closeShutter")){
-			closeWindowSet = false;
+		}else if(!strcmp(content,"lowerShutter")){
+			lowerRollerSet = false;
 			printf("The roller shutter is lowered\n");
-		}else if(!strcmp(content,"manualOpenShutter")){
+		}else if(!strcmp(content,"manualLiftShutter")){
 			printf("The roller shutter is lifted up\n");
 			ctimer_stop(&ACK_timer);
 			waitingForACK = false;
 			basestationBusy = false;
 			selectDevice();
 		}
-		else if(!strcmp(content,"manualCloseShutter")){
+		else if(!strcmp(content,"manualLowerShutter")){
 			printf("The roller shutter is lowered\n");
 			ctimer_stop(&ACK_timer);
 			waitingForACK = false;
@@ -153,15 +152,15 @@ void handleCancelOK(const linkaddr_t* src, char* content){
 		printf("The oven is no longer used\n");
 	}
 	if(linkaddr_cmp(src,&window_addr)){	
-		if(!strcmp(content,"openAlarm")){
-			openWindowSet = false;
-			printf("The opening command for roller shutter has been canceled\n");
+		if(!strcmp(content,"liftAlarm")){
+			liftRollerSet = false;
+			printf("The lifting up command for roller shutter has been canceled\n");
 		}
-		else if(!strcmp(content,"closeAlarm")){
-			closeWindowSet = false;
-			printf("The closing command for roller shutter has been canceled\n");
+		else if(!strcmp(content,"lowerAlarm")){
+			lowerRollerSet = false;
+			printf("The lowering command for roller shutter has been canceled\n");
 		}
-		if(!closeWindowSet && !openWindowSet)
+		if(!lowerRollerSet && !liftRollerSet)
 		printf("The window has now no timers assigned\n");
 	}
 
@@ -179,6 +178,10 @@ void handleCancelErr(){
 	ctimer_stop(&ACK_timer);
 	selectDevice();
 	return;
+}
+
+void handleHumidityLevel(){
+	printf("Room humidity is too high. Sending command to actuators.\n");
 }
 
 
@@ -212,6 +215,9 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 			break;
 		case CANCEL_ERR:
 			handleCancelErr();
+			break;
+		case HUMIDITY_LEVEL:
+			handleHumidityLevel();
 			break;
 		default:
 			LOG_INFO("ERROR: Code not found \n");
@@ -424,10 +430,10 @@ void checkAndSendHumidity(char* data){
 }
 
 
-void checkAndSendOpenRollerShutter(char* data){
+void checkAndSendLiftRollerShutter(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
-		settingOpenRollerShutter = false;
+		settingLiftRollerShutter = false;
 		basestationBusy = false;
 		communicationWithWindow = false;
 		return;
@@ -435,12 +441,12 @@ void checkAndSendOpenRollerShutter(char* data){
 	char parametersWindow[strlen(data)+1];
 	strcpy(parametersWindow,data);
 	uint8_t hours,minutes;
-	if(checkParametersWindow(data,&hours,&minutes)){ //to avoid crash of the program, if the user types a string not convertible to number
-		sendMsg(SET_TIMER_OPEN,&window_addr,parametersWindow);
+	if(checkParametersWindow(data,&hours,&minutes)){
+		sendMsg(SET_TIMER_LIFT,&window_addr,parametersWindow);
 		waitingForACK = true;
 		if(hours || minutes)
 			openStatusWindow = true;
-		settingOpenRollerShutter = false;
+		settingLiftRollerShutter = false;
 		ctimer_restart(&ACK_timer);
 	}else{
 		printf("ERROR: Check the format of inserted data\n");
@@ -448,10 +454,10 @@ void checkAndSendOpenRollerShutter(char* data){
 }
 
 
-void checkAndSendCloseRollerShutter(char* data){
+void checkAndSendLowerRollerShutter(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
-		settingCloseRollerShutter = false;
+		settingLowerRollerShutter = false;
 		basestationBusy = false;
 		communicationWithWindow = false;
 		return;
@@ -459,12 +465,12 @@ void checkAndSendCloseRollerShutter(char* data){
 	char parametersWindow[strlen(data)+1];
 	strcpy(parametersWindow,data);
 	uint8_t hours,minutes;
-	if(checkParametersWindow(data,&hours,&minutes)){ //to avoid crash of the program, if the user types a string not convertible to number
-		sendMsg(SET_TIMER_CLOSE,&window_addr,parametersWindow);
+	if(checkParametersWindow(data,&hours,&minutes)){
+		sendMsg(SET_TIMER_LOWER,&window_addr,parametersWindow);
 		waitingForACK = true;
 		if(hours || minutes)
 			closeStatusWindow = true;
-		settingCloseRollerShutter = false;
+		settingLowerRollerShutter = false;
 		ctimer_restart(&ACK_timer);
 	}else{
 		printf("ERROR: Check the format of inserted data\n");
@@ -481,12 +487,12 @@ void handleCommunicationWithWindow(char* data){
 		checkAndSendHumidity(data);
 	}
 
-	else if(settingOpenRollerShutter){
-		checkAndSendOpenRollerShutter(data);
+	else if(settingLiftRollerShutter){
+		checkAndSendLiftRollerShutter(data);
 	}
 
-	else if(settingCloseRollerShutter){
-		checkAndSendCloseRollerShutter(data);
+	else if(settingLowerRollerShutter){
+		checkAndSendLowerRollerShutter(data);
 	}
 
 	else if(!strcmp(data,"back")){
@@ -495,25 +501,31 @@ void handleCommunicationWithWindow(char* data){
 		selectDevice();		
 	}
 
-	else if(!strcmp(data,"cancelOpenTimer") || !strcmp(data,"cancelopentimer")){
-		if(openWindowSet){
-			sendMsg(CANCEL_OPERATION,&window_addr,"openTimer");
+	else if(!strcmp(data,"cancelLiftTimer") || !strcmp(data,"cancellifttimer")){
+		if(liftRollerSet){
+			sendMsg(CANCEL_OPERATION,&window_addr,"liftTimer");
 			waitingForACK = true;
 			ctimer_restart(&ACK_timer);
 		}
 		else{
 			printf("Window has no timer for roller shutter opening configured\n");
+			selectDevice();
+			communicationWithWindow = false;
+			basestationBusy = false;
 		}
 	}
 
-	else if(!strcmp(data,"cancelCloseTimer") || !strcmp(data,"cancelclosetimer")){
-		if(closeWindowSet){
-			sendMsg(CANCEL_OPERATION,&window_addr,"closeTimer");
+	else if(!strcmp(data,"cancelLowerTimer") || !strcmp(data,"cancellowertimer")){
+		if(lowerRollerSet){
+			sendMsg(CANCEL_OPERATION,&window_addr,"lowerTimer");
 			waitingForACK = true;
 			ctimer_restart(&ACK_timer);
 		}
 		else{
 			printf("Window has no timer for roller shutter closing configured\n");
+			selectDevice();
+			communicationWithWindow = false;
+			basestationBusy = false;
 		}
 	}
 
@@ -541,30 +553,30 @@ void handleCommunicationWithWindow(char* data){
 		ctimer_restart(&ACK_timer);
 	}
 
-	else if(!strcmp(data,"openRollerShutter") || !strcmp(data,"openrollershutter")){
-		LOG_INFO("Open roller shutter\n");
-		sendMsg(OPEN_SHUTTER,&window_addr,NULL);
+	else if(!strcmp(data,"liftRollerShutter") || !strcmp(data,"liftrollershutter")){
+		LOG_INFO("Lift up roller shutter\n");
+		sendMsg(LIFT_SHUTTER,&window_addr,NULL);
 		waitingForACK = true;
 		ctimer_restart(&ACK_timer);
 	}
 
-	else if(!strcmp(data,"closeRollerShutter") || !strcmp(data,"closerollershutter")){
-		LOG_INFO("Close roller shutter\n");
-		sendMsg(CLOSE_SHUTTER,&window_addr,NULL);
+	else if(!strcmp(data,"lowerRollerShutter") || !strcmp(data,"lowerrollershutter")){
+		LOG_INFO("Lower roller shutter\n");
+		sendMsg(LOWER_SHUTTER,&window_addr,NULL);
 		waitingForACK = true;
 		ctimer_restart(&ACK_timer);
 	}
 
-	else if(!strcmp(data,"setOpenRollerShutter") || !strcmp(data,"setopenrollershutter")){
-		LOG_INFO("Set open roller shutter \n");
-		settingOpenRollerShutter = true;
-		printf("Insert timer for the opening of roller shutter in format HH:MM\n");
+	else if(!strcmp(data,"setLiftRollerShutter") || !strcmp(data,"setliftrollershutter")){
+		LOG_INFO("Set lift roller shutter \n");
+		settingLiftRollerShutter = true;
+		printf("Insert timer for the lifting up of roller shutter in format HH:MM\n");
 	}
 
-	else if(!strcmp(data,"setCloseRollerShutter") || !strcmp(data,"setcloserollershutter")){
-		LOG_INFO("Set close roller shutter\n");
-		settingCloseRollerShutter = true;
-		printf("Insert timer for the closing of roller shutter in format HH:MM\n");
+	else if(!strcmp(data,"setLowerRollerShutter") || !strcmp(data,"setlowerrollershutter")){
+		LOG_INFO("Set lower roller shutter\n");
+		settingLowerRollerShutter = true;
+		printf("Insert timer for the lowering of roller shutter in format HH:MM\n");
 	}
 
 	else
@@ -596,9 +608,9 @@ void handle_serial_line(char* data){
 			return;
 		}
 		if(!strcmp(data,"window") && window_sync){
-			printf("Available commands:\n -back \n -cancelOpenTimer \n -cancelCloseTimer \n -openWindow \n");
-			printf(" -closeWindow \n -setOpenRollerShutter \n -setCloseRollerShutter \n");
-			printf(" -openRollerShutter \n -closeRollerShutter \n -setTemperature \n -setHumidity \n");
+			printf("Available commands:\n -back \n -openWindow \n -closeWindow \n");
+			printf(" -liftRollerShutter \n -lowerRollerShutter \n -setLiftRollerShutter \n -setLowerRollerShutter \n");
+			printf(" -cancelLiftTimer \n -cancelLowerTimer \n -setTemperature \n -setHumidity \n");
 			communicationWithWindow = true;
 			basestationBusy = true;
 			return;
@@ -706,8 +718,8 @@ PROCESS_THREAD(basestation_proc, ev, data){
 
 	PROCESS_BEGIN();
 	
-	//cc26xx_uart_set_input(serial_line_input_byte);	//LAUNCHPAD
-	//serial_line_init();								//LAUNCHPAD
+	cc26xx_uart_set_input(serial_line_input_byte);	//LAUNCHPAD
+	serial_line_init();								//LAUNCHPAD
 	leds_on(LEDS_RED);
 	nullnet_set_input_callback(input_callback);
 

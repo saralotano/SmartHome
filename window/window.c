@@ -2,8 +2,8 @@
 #include "net/netstack.h"
 #include "net/nullnet/nullnet.h"
 #include "os/dev/leds.h"
-//#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"	//LAUNCHPAD
-//#include "os/dev/button-hal.h" 						//LAUNCHPAD
+#include "arch/cpu/cc26x0-cc13x0/dev/cc26xx-uart.h"	//LAUNCHPAD
+#include "os/dev/button-hal.h" 						//LAUNCHPAD
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +11,7 @@
 #include "sys/clock.h"
 #include "sys/ctimer.h"
 #include "sys/etimer.h"
-//#include "batmon-sensor.h"							//LAUNCHPAD
+#include "batmon-sensor.h"							//LAUNCHPAD
 #include "random.h"
 #include "parameters.h"
 
@@ -21,14 +21,16 @@
 
 static linkaddr_t basestation_addr;
 
-static struct ctimer open_alarm;
-static struct ctimer close_alarm;
+static struct ctimer lift_alarm;
+static struct ctimer lower_alarm;
 static struct ctimer automaticMode;
 static struct ctimer manualMode;
+static struct ctimer humidityTimer;
 
 static int userTemperature = DEFAULT_TEMPERATURE;
 static int userHumidity = DEFAULT_HUMIDITY;
 static int currentTemp = 0;
+static int currentHumidity = 0;
 
 static bool alreadySynchronized = false;
 static bool windowOpened = false;
@@ -80,12 +82,12 @@ void node_sync(){
 }
 
 void noEnvironmentCallback(){
-	printf("Automatic mode timer is active\n");
+	printf("Automatic mode timer is now active\n");
 	ctimer_restart(&automaticMode);
 }
 
 void openWindow(){
-	printf("Open Window \n");
+	printf("Opening Window \n");
 	windowOpened = true;
 	leds_on(LEDS_GREEN);
 	leds_off(LEDS_RED);
@@ -95,7 +97,7 @@ void openWindow(){
 }
 
 void closeWindow(){
-	printf("Close Window \n");
+	printf("Closing Window \n");
 	windowOpened = false;
 	leds_off(LEDS_GREEN);
 	leds_on(LEDS_RED);
@@ -106,16 +108,15 @@ void closeWindow(){
 
 void environmentCallback(){
 	
-	//SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
-	//currentTemp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);	//LAUNCHPAD
-	//SENSORS_DEACTIVATE(batmon_sensor);							//LAUNCHPAD
+	SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
+	currentTemp = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);		//LAUNCHPAD
+	SENSORS_DEACTIVATE(batmon_sensor);								//LAUNCHPAD
 
-	currentTemp = DEFAULT_TEMPERATURE;	//COOJA	
 	bool changeStatus = false;
 
 	if(windowOpened){
 		currentTemp -= random_rand()%10;
-		LOG_INFO("Window opened, current temperature: %d °C\n",currentTemp);
+		LOG_INFO("Window status: opened. Current temperature: %d °C\n",currentTemp);
 		if(currentTemp < userTemperature){
 			changeStatus = true;
 			closeWindow();
@@ -123,7 +124,7 @@ void environmentCallback(){
 	}
 	else{
 		currentTemp += random_rand()%10;
-		LOG_INFO("Window closed, current temperature: %d °C\n",currentTemp);
+		LOG_INFO("Window status: closed. Current temperature: %d °C\n",currentTemp);
 		if(currentTemp > userTemperature){
 			changeStatus = true;
 			openWindow();
@@ -136,30 +137,30 @@ void environmentCallback(){
 }
 
 
-void manualOpenShutter(){
-	printf("Lift roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualOpenShutter");
+void manualLiftShutter(){
+	printf("Lifting roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLiftShutter");
 	return;
 }
 
 
-void manualCloseShutter(){
-	printf("Lower roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualCloseShutter");
+void manualLowerShutter(){
+	printf("Lowering roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLowerShutter");
 	return;
 }
 
 
-void openAlarmCallback(){	
-	printf("Lift roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"openShutter");
+void liftAlarmCallback(){	
+	printf("Lifting roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"liftShutter");
 	return;
 }
 
 
-void closeAlarmCallback(){
-	printf("Lower roller shutter \n");
-	sendMsg(OPERATION_COMPLETED,&basestation_addr,"closeShutter");
+void lowerAlarmCallback(){
+	printf("Lowering roller shutter \n");
+	sendMsg(OPERATION_COMPLETED,&basestation_addr,"lowerShutter");
 	return;
 }
 
@@ -191,8 +192,7 @@ void handleSetHumidity(char* content){
 }
 
 
-void handleSetTimerOpen(char* content){
-	LOG_INFO("handleSetTimerOpen \n");
+void handleSetTimerLift(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
@@ -200,17 +200,16 @@ void handleSetTimerOpen(char* content){
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);
 	
-	//LOG_INFO("hours: %d\n",hours);
-	//LOG_INFO("minutes: %d\n",minutes);
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
 
 	//int seconds = minutes*60 + hours*3600; 
 	sendMsg(OPERATION_OK,&basestation_addr,"setOpenShutter");		
-	ctimer_set(&open_alarm, minutes * CLOCK_SECOND, openAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lift_alarm, minutes * CLOCK_SECOND, liftAlarmCallback, NULL);	//we must use seconds
 }
 
 
-void handleSetTimerClose(char* content){
-	LOG_INFO("handleSetTimerClose \n");
+void handleSetTimerLower(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
 	uint8_t hours = atoi(ptr);
@@ -218,25 +217,25 @@ void handleSetTimerClose(char* content){
 	ptr = strtok(NULL,delim);
 	uint8_t minutes = atoi(ptr);
 	
-	//LOG_INFO("hours: %d\n",hours);
-	//LOG_INFO("minutes: %d\n",minutes);
+	LOG_INFO("hours: %d\n",hours);
+	LOG_INFO("minutes: %d\n",minutes);
 
 	//int seconds = minutes*60 + hours*3600;
 	sendMsg(OPERATION_OK,&basestation_addr,"setCloseShutter");		
-	ctimer_set(&close_alarm, minutes * CLOCK_SECOND, closeAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lower_alarm, minutes * CLOCK_SECOND, lowerAlarmCallback, NULL);	//we must use seconds
 }
 
 
 void handleCancelOperation(char* content){
-	if(!strcmp(content,"openTimer")){
-		printf("Open Alarm reset\n");
-		ctimer_stop(&open_alarm);
-		sendMsg(CANCEL_OK,&basestation_addr,"openAlarm");
+	if(!strcmp(content,"liftTimer")){
+		printf("Lift Alarm reset\n");
+		ctimer_stop(&lift_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"liftAlarm");
 	}
-	else if(!strcmp(content,"closeTimer")){
-		printf("Close Alarm reset\n");
-		ctimer_stop(&close_alarm);
-		sendMsg(CANCEL_OK,&basestation_addr,"closeAlarm");
+	else if(!strcmp(content,"lowerTimer")){
+		printf("Lower Alarm reset\n");
+		ctimer_stop(&lower_alarm);
+		sendMsg(CANCEL_OK,&basestation_addr,"lowerAlarm");
 	}
 }
 
@@ -250,6 +249,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		node_sync();
 		alreadySynchronized = true;
 		ctimer_restart(&automaticMode);
+		ctimer_restart(&humidityTimer);
 	}
 	
 	if(linkaddr_cmp(dest,&linkaddr_node_addr) && linkaddr_cmp(src,&basestation_addr)){
@@ -268,20 +268,20 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 				handleCloseWindow();
 				break;
 
-			case OPEN_SHUTTER:
-				manualOpenShutter();
+			case LIFT_SHUTTER:
+				manualLiftShutter();
 				break;
 
-			case CLOSE_SHUTTER:
-				manualCloseShutter();
+			case LOWER_SHUTTER:
+				manualLowerShutter();
 				break;
 
-			case SET_TIMER_OPEN:
-				handleSetTimerOpen(content);
+			case SET_TIMER_LIFT:
+				handleSetTimerLift(content);
 				break;
 
-			case SET_TIMER_CLOSE:
-				handleSetTimerClose(content);
+			case SET_TIMER_LOWER:
+				handleSetTimerLower(content);
 				break;
 
 			case SET_TEMPERATURE:
@@ -303,6 +303,24 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	}
 }
 
+void humidityCallback(){
+	if(alreadySynchronized){
+		if(currentHumidity > userHumidity){
+			currentHumidity=0;
+		}
+		else{
+			currentHumidity+=random_rand()%10;
+		}
+
+		LOG_INFO("Current humidity %d\n",currentHumidity);
+		if(currentHumidity > userHumidity){
+			printf("Humidity level is too high. Sending message to the basestation\n");
+			sendMsg(HUMIDITY_LEVEL,&basestation_addr,"humidity");
+		}
+	}
+	ctimer_restart(&humidityTimer);
+}
+
 
 PROCESS_THREAD(window_proc, ev, data){
 
@@ -311,13 +329,14 @@ PROCESS_THREAD(window_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
-	ctimer_set(&automaticMode, 5*CLOCK_SECOND, environmentCallback, NULL);	//cambiare 5 con un numero più alto
+	ctimer_set(&automaticMode, 5*CLOCK_SECOND, environmentCallback, NULL);	
 	ctimer_stop(&automaticMode);
-	ctimer_set(&manualMode, 20*CLOCK_SECOND, noEnvironmentCallback, NULL);	//cambiare 20 con un numero più alto
+	ctimer_set(&manualMode, 20*CLOCK_SECOND, noEnvironmentCallback, NULL);	
 	ctimer_stop(&manualMode);
+	ctimer_set(&humidityTimer, 15*CLOCK_SECOND, humidityCallback, NULL); //timer used for checking humidity periodically
+	ctimer_stop(&humidityTimer);
 
-	//LAUNCHPAD
-	/*while(1){
+	while(1){
 		PROCESS_YIELD();
 		button_hal_button_t *btn = (button_hal_button_t *)data;
 		if(ev == button_hal_press_event){
@@ -328,7 +347,7 @@ PROCESS_THREAD(window_proc, ev, data){
 				closeWindow();
 			}
 		}
-	}*/
+	}
 
 	PROCESS_END();
 }

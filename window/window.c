@@ -39,6 +39,7 @@ static bool windowOpened = false;
 PROCESS(window_proc, "window_proc");
 AUTOSTART_PROCESSES(&window_proc);
 
+//This function checks the lenght of each received message
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
 		LOG_INFO("ERROR: Message lenght not correct \n");
@@ -47,7 +48,7 @@ char* getMsg(const void *data, uint16_t len){
 	return content;
 }
 
-
+//This function is used to send message from the window to the basestaion
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	int size;
 	if(content == NULL)
@@ -66,6 +67,7 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	return;
 }
 
+//This message is used to communicate the MAC address to the basestation
 void node_sync(){
 
 	uint8_t op = DISCOVER_RESP;
@@ -81,11 +83,13 @@ void node_sync(){
 	return;
 }
 
+//This function is called when temperature sensing switches from manual to automatic
 void noEnvironmentCallback(){
 	printf("Automatic mode timer is now active\n");
 	ctimer_restart(&automaticMode);
 }
 
+//This function is used to change window status from close to open
 void openWindow(){
 	printf("Opening Window \n");
 	windowOpened = true;
@@ -96,6 +100,7 @@ void openWindow(){
 
 }
 
+//This function is used to change window status from open to close
 void closeWindow(){
 	printf("Closing Window \n");
 	windowOpened = false;
@@ -105,7 +110,7 @@ void closeWindow(){
 	ctimer_restart(&manualMode);				
 }
 
-
+//This function is called when temperature sensing is in automatic mode 
 void environmentCallback(){
 	
 	SENSORS_ACTIVATE(batmon_sensor);								//LAUNCHPAD
@@ -136,62 +141,63 @@ void environmentCallback(){
 	}
 }
 
-
+//This function handles manual roller shutter lifting
 void manualLiftShutter(){
 	printf("Lifting roller shutter \n");
 	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLiftShutter");
 	return;
 }
 
-
+//This function handles manual roller shutter lowering
 void manualLowerShutter(){
 	printf("Lowering roller shutter \n");
 	sendMsg(OPERATION_COMPLETED,&basestation_addr,"manualLowerShutter");
 	return;
 }
 
-
+//This function is called when roller shutter lifting timer expires
 void liftAlarmCallback(){	
 	printf("Lifting roller shutter \n");
 	sendMsg(OPERATION_COMPLETED,&basestation_addr,"liftShutter");
 	return;
 }
 
-
+//This function is called when roller shutter lowering timer expires
 void lowerAlarmCallback(){
 	printf("Lowering roller shutter \n");
 	sendMsg(OPERATION_COMPLETED,&basestation_addr,"lowerShutter");
 	return;
 }
 
-
+//This function handles window opening
 void handleOpenWindow(){	
 	openWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 
-
+//This function handles window closing 
 void handleCloseWindow(){	
 	closeWindow();
 	sendMsg(OPERATION_OK,&basestation_addr,NULL);
 	return;
 }
 
-
+//This function sets user desiderd room temperature
 void handleSetTemperature(char* content){
 	userTemperature = atoi(content);
 	LOG_INFO("User temperature set to : %d °C\n", userTemperature);
 	sendMsg(OPERATION_OK, &basestation_addr, NULL);
 }
 
+//This function sets user desiderd room humidity
 void handleSetHumidity(char* content){
 	userHumidity = atoi(content);
 	LOG_INFO("User humidity set to : %d %% \n", userHumidity);
 	sendMsg(OPERATION_OK, &basestation_addr, NULL);
 }
 
-
+//This function sets the timer for the roller shutter lifting
 void handleSetTimerLift(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
@@ -203,12 +209,12 @@ void handleSetTimerLift(char* content){
 	LOG_INFO("hours: %d\n",hours);
 	LOG_INFO("minutes: %d\n",minutes);
 
-	//int seconds = minutes*60 + hours*3600; 
+	//int seconds = minutes*60 + hours*3600;	//we don't use seconds because simulation would become too long
 	sendMsg(OPERATION_OK,&basestation_addr,"setOpenShutter");		
-	ctimer_set(&lift_alarm, minutes * CLOCK_SECOND, liftAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lift_alarm, minutes * CLOCK_SECOND, liftAlarmCallback, NULL);
 }
 
-
+//This function sets the timer for the roller shutter lowering
 void handleSetTimerLower(char* content){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
@@ -220,12 +226,12 @@ void handleSetTimerLower(char* content){
 	LOG_INFO("hours: %d\n",hours);
 	LOG_INFO("minutes: %d\n",minutes);
 
-	//int seconds = minutes*60 + hours*3600;
+	//int seconds = minutes*60 + hours*3600;	//we don't use seconds because simulation would become too long
 	sendMsg(OPERATION_OK,&basestation_addr,"setCloseShutter");		
-	ctimer_set(&lower_alarm, minutes * CLOCK_SECOND, lowerAlarmCallback, NULL);	//we must use seconds
+	ctimer_set(&lower_alarm, minutes * CLOCK_SECOND, lowerAlarmCallback, NULL);	
 }
 
-
+//This function deletes roller shutter timres
 void handleCancelOperation(char* content){
 	if(!strcmp(content,"liftTimer")){
 		printf("Lift Alarm reset\n");
@@ -239,11 +245,12 @@ void handleCancelOperation(char* content){
 	}
 }
 
-
+//This function is called every time that the window receives a message
+//each message represents a specific code which deals with the corresponding handle function
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	
 	if(linkaddr_cmp(dest, &linkaddr_null) && !alreadySynchronized){
-		LOG_INFO("Broadcast received\n");
+		LOG_INFO("Broadcast message received\n");
 		leds_off(LEDS_RED);
 		basestation_addr = *src;
 		node_sync();
@@ -303,6 +310,7 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 	}
 }
 
+//This function checks room humidity level and when humidity is too high, it sends a message to the basestation
 void humidityCallback(){
 	if(alreadySynchronized){
 		if(currentHumidity > userHumidity){
@@ -329,18 +337,18 @@ PROCESS_THREAD(window_proc, ev, data){
 	nullnet_set_input_callback(input_callback);
 	leds_on(LEDS_RED);
 
-	ctimer_set(&automaticMode, 5*CLOCK_SECOND, environmentCallback, NULL);	
+	ctimer_set(&automaticMode,5 * CLOCK_SECOND, environmentCallback, NULL);	
 	ctimer_stop(&automaticMode);
-	ctimer_set(&manualMode, 20*CLOCK_SECOND, noEnvironmentCallback, NULL);	
+	ctimer_set(&manualMode,20 * CLOCK_SECOND, noEnvironmentCallback, NULL);	
 	ctimer_stop(&manualMode);
-	ctimer_set(&humidityTimer, 15*CLOCK_SECOND, humidityCallback, NULL); //timer used for checking humidity periodically
+	ctimer_set(&humidityTimer, 15 * CLOCK_SECOND, humidityCallback, NULL); //timer used for checking humidity periodically
 	ctimer_stop(&humidityTimer);
 
 	while(1){
 		PROCESS_YIELD();
 		button_hal_button_t *btn = (button_hal_button_t *)data;
 		if(ev == button_hal_press_event){
-			if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_LEFT){	//the user has opened the window
+			if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_LEFT){			//the user has opened the window
 				openWindow();
 			} 
 			else if(btn->unique_id == BOARD_BUTTON_HAL_INDEX_KEY_RIGHT) { //the user has closed the window

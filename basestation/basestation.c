@@ -48,7 +48,7 @@ void selectDevice();
 PROCESS(basestation_proc, "basestation");
 AUTOSTART_PROCESSES(&basestation_proc);
 
-
+//This function is called when a sensor node sends its MAC address to the basestation
 static void synchNode(char* received_data,const linkaddr_t *src){
 
 	if(num_sync_nodes >= number_nodes)
@@ -62,6 +62,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 		oven_sync = true;
 		num_sync_nodes++;
 	}
+
 	else if(strcmp(received_data, "window") == 0 && !window_sync){
 		window_addr = *src;
 		LOG_INFO("Window address : ");
@@ -88,7 +89,7 @@ static void synchNode(char* received_data,const linkaddr_t *src){
 	}
 }
 
-
+//This function changes the status of the devices when they correctly receive all the parameters
 void handleOperationOK(const linkaddr_t* src){
 	if(linkaddr_cmp(src,&oven_addr)){
 		printf("The oven has correctly received all the parameters. \n");
@@ -112,7 +113,8 @@ void handleOperationOK(const linkaddr_t* src){
 	return;
 }
 
-
+//This function is called every time that a device sends a message to the basestation 
+//to communicate the end of a previous operation
 void handleOperationCompleted(const linkaddr_t* src, char* content){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
@@ -144,7 +146,7 @@ void handleOperationCompleted(const linkaddr_t* src, char* content){
 	}
 }
 
-
+//This function is called when the user wants to cancel a command previously inserted 
 void handleCancelOK(const linkaddr_t* src, char* content){
 
 	if(linkaddr_cmp(src,&oven_addr)){	
@@ -170,7 +172,7 @@ void handleCancelOK(const linkaddr_t* src, char* content){
 	selectDevice();
 }
 
-
+//This is an error function called when the user tries to cancel the operation but the preparation is already finished
 void handleCancelErr(){
 	printf("The preparation is already finished, cannot cancel the operation\n");
 	waitingForACK = false;
@@ -180,11 +182,13 @@ void handleCancelErr(){
 	return;
 }
 
+//This function is called every time that the window humidity sensor detect that the humidity in the room is to high
+//the function could act on a possible dehumidifier in order to fix humidity level 
 void handleHumidityLevel(){
 	printf("Room humidity is too high. Sending command to actuators.\n");
 }
 
-
+//This function checks the lenght of each received message
 char* getMsg(const void *data, uint16_t len){
 	if(len != strlen((char *)data) + 1){
 		LOG_INFO("Message length error \n");
@@ -193,7 +197,8 @@ char* getMsg(const void *data, uint16_t len){
 	return content;
 }
 
-
+//This function is called every time that the basestation receives a message
+//each message represents a specific code which deals with the corresponding handle function
 static void input_callback(const void *data, uint16_t len, const linkaddr_t *src, const linkaddr_t *dest){
 	uint8_t op = *(uint8_t *)data;
 
@@ -210,22 +215,26 @@ static void input_callback(const void *data, uint16_t len, const linkaddr_t *src
 		case OPERATION_COMPLETED:
 			handleOperationCompleted(src, getMsg(data,len));	
 			break;
+
 		case CANCEL_OK:
 			handleCancelOK(src, getMsg(data,len));
 			break;
+
 		case CANCEL_ERR:
 			handleCancelErr();
 			break;
+
 		case HUMIDITY_LEVEL:
 			handleHumidityLevel();
 			break;
+
 		default:
 			LOG_INFO("ERROR: Code not found \n");
 			return;
 	}
 }
 
-
+//This function is used to send message from the basestation to the other sensor nodes
 void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	int size;
 	if(content == NULL)
@@ -245,7 +254,7 @@ void sendMsg(uint8_t op,linkaddr_t *dest, char* content){
 	return;
 }
 
-
+//This function is used when the user sets a timer for the window and it checks if all the parameters are correct
 bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes){
 	char delim[] = ":";
 	char* ptr = strtok(content,delim);
@@ -297,7 +306,7 @@ bool checkParametersWindow(char* content,uint8_t* retHours, uint8_t* retMinutes)
 	return true;
 }
 
-
+//This function is used when the user sets a timer for the oven and it checks if both parameters are correct
 bool checkParametersOven(char* content){
 	if(!atoi(content)){
 			printf("FORMAT_ERROR: unknown parameters \n");
@@ -337,7 +346,7 @@ bool checkParametersOven(char* content){
 	return true;
 }
 
-
+//This function calls the function used to check the correctness of the parameters and sends them to the oven
 void checkAndSendParametersOven(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
@@ -356,7 +365,7 @@ void checkAndSendParametersOven(char* data){
 	}
 }
 
-
+//This function handles all the existing commands for the oven
 void handleCommunicationWithOven(char* data){
 	if(settingParametersOven)
 		checkAndSendParametersOven(data);	
@@ -389,7 +398,7 @@ void handleCommunicationWithOven(char* data){
 	}
 }
 
-
+//This function calls the function used to check the correctness of the temperature and sends the value to the window
 void checkAndSendTemperature(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
@@ -409,7 +418,7 @@ void checkAndSendTemperature(char* data){
 	}
 }
 
-
+//This function calls the function used to check the correctness of the humidity and sends the value to the window
 void checkAndSendHumidity(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
@@ -429,7 +438,7 @@ void checkAndSendHumidity(char* data){
 	}
 }
 
-
+//This function is used when the user sets a timer for roller shutter lifting and it checks if the parameters are correct
 void checkAndSendLiftRollerShutter(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
@@ -453,7 +462,7 @@ void checkAndSendLiftRollerShutter(char* data){
 	}	
 }
 
-
+//This function is used when the user sets a timer for roller shutter lowering and it checks if the parameters are correct
 void checkAndSendLowerRollerShutter(char* data){
 	if(!strcmp(data,"back")){
 		selectDevice();
@@ -477,7 +486,7 @@ void checkAndSendLowerRollerShutter(char* data){
 	}	
 }
 
-
+//This function handles all the existing commands for the window
 void handleCommunicationWithWindow(char* data){
 	if(settingTemperature){
 		checkAndSendTemperature(data);
@@ -583,7 +592,7 @@ void handleCommunicationWithWindow(char* data){
 		printf("ERROR: Command not found\n");
 }
 
-
+//This function shows a list of devices correctly synched
 void selectDevice(){
 	printf("Select a device to comunicate with \n");
 	if(oven_sync)
@@ -592,7 +601,7 @@ void selectDevice(){
 		printf(" - window\n");
 }
 
-
+//This function reads commands from the serial line
 void handle_serial_line(char* data){
 
 	if(waitingForACK){
@@ -647,13 +656,14 @@ void handle_serial_line(char* data){
 
 }
 
-
+//This function handles green leds blinking when at least one device is correctly synchronized
 void blinkGreenLedCallback(){
 	leds_toggle(LEDS_GREEN);
 	ctimer_restart(&green_led);
 }
 
-
+//This function waits for a sensor ACK. 
+//If the basestation does not receive an ACK within 5 seconds, that sensor is considered disconnected 
 void ackTimerCallback(){
 	if(communicationWithWindow){
 		communicationWithWindow = false;
@@ -677,7 +687,8 @@ void ackTimerCallback(){
 	waitingForACK = false;
 }
 
-
+//This function is called when the basestation needs to discover sensor nodes' MAC addresses
+//after 5 attempts, it waits for 5 seconds and then it tries for other 5 times 
 void discoverNodes(){
 	sendMsg(DISCOVER_REQ,NULL,NULL);
 	num_sync_attempts++;
@@ -708,7 +719,7 @@ void discoverNodes(){
 		ctimer_restart(&broad_timer);
 }
 
-
+//This function is called to restart the broadcast timer
 void broadtimeCallback(){
 	ctimer_restart(&broad_timer);
 }
